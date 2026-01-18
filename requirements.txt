@@ -26,12 +26,12 @@ bcrypt==4.1.2
 # -----------------------------
 # AI / NLP (MVP + Future Ready)
 # -----------------------------
-scikit-learn==1.4.1.post1
-numpy==1.26.4
+#scikit-learn==1.4.1.post1
+#numpy==1.26.4
 
 # Optional (future upgrades)
-spacy==3.7.4
-sentence-transformers==2.5.1
+#spacy==3.7.4
+#sentence-transformers==2.5.1
 
 # -----------------------------
 # HTTP Client (future external APIs)
