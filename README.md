@@ -85,43 +85,49 @@ Copy code
 
 The project follows a clean, layered architecture where each layer has a single responsibility.
 
+```
 app/
-├── main.py # Application entry point
+├── main.py                  # Application entry point
 │
-├── api/ # HTTP API layer (FastAPI routes)
-│ ├── auth.py # Authentication endpoints
-│ ├── tickets.py # Ticket lifecycle APIs
-│ ├── feedback.py # Feedback submission APIs
-│ └── admin.py # Admin & metrics APIs
+├── api/                     # HTTP API layer (FastAPI routes)
+│   ├── auth.py              # Authentication endpoints
+│   ├── tickets.py           # Ticket lifecycle APIs
+│   ├── feedback.py          # Feedback submission APIs
+│   └── admin.py             # Admin & metrics APIs
 │
-├── core/ # Core application utilities
-│ ├── config.py # Environment & app configuration
-│ └── security.py # JWT & password utilities
+├── core/                    # Core application utilities
+│   ├── config.py            # Environment & app configuration
+│   └── security.py          # JWT & password utilities
 │
-├── db/ # Database configuration
-│ └── session.py # SQLAlchemy engine & session
+├── db/                      # Database configuration
+│   └── session.py           # SQLAlchemy engine & session
 │
-├── models/ # Database models (ORM)
-│ ├── user.py
-│ ├── ticket.py
-│ └── feedback.py
+├── models/                  # Database models (ORM)
+│   ├── user.py
+│   ├── ticket.py
+│   └── feedback.py
 │
-├── schemas/ # Pydantic schemas (API contracts)
-│ ├── user.py
-│ ├── ticket.py
-│ └── feedback.py
+├── schemas/                 # Pydantic schemas (API contracts)
+│   ├── user.py
+│   ├── ticket.py
+│   └── feedback.py
 │
-├── services/ # Business & AI logic (no FastAPI here)
-│ ├── classifier.py # Intent classification
-│ ├── similarity.py # Similar ticket search
-│ ├── resolver.py # Response generation
-│ └── decision.py # Auto-resolve vs escalation logic
+├── services/                # Business & AI logic (no FastAPI here)
+│   ├── classifier.py        # Intent classification
+│   ├── similarity.py        # Similar ticket search
+│   ├── resolver.py          # Response generation
+│   └── decision.py          # Auto-resolve vs escalation logic
 │
-tests/ # Unit & integration tests
-workers/ # Background jobs (future use)
+tests/                       # Unit & integration tests
+workers/                     # Background jobs (future use)
+```
 
-markdown
-Copy code
+### Architecture Rules
+- **API layer** → request handling & orchestration only
+- **Service layer** → AI and business logic
+- **Models** → database schema
+- **Schemas** → request/response validation
+
 
 ### Architecture Rules
 - **API layer** handles HTTP and orchestration only  
@@ -129,23 +135,42 @@ Copy code
 - **Models** define database structure  
 - **Schemas** define request/response contracts 
 ---
-
 ## 🔄 Ticket Lifecycle
 
-OPEN
-↓
-Intent Classification
-↓
-Similarity Matching
-↓
-Decision Engine
-↓
-AUTO_RESOLVED ──► Feedback
-↓
-ESCALATED ──► Human Agent
+The ticket lifecycle is deterministic and confidence-driven, ensuring safe automation.
 
-yaml
-Copy code
+```
+Ticket Created (OPEN)
+        |
+        v
+Intent Classification
+        |
+        v
+Similarity Search
+(past resolved tickets)
+        |
+        v
+Decision Engine
+(confidence based)
+        |
+        +---------------------------+
+        |                           |
+        v                           v
+AUTO_RESOLVE                 ESCALATE
+(confidence ≥ 0.75)          (confidence < 0.75)
+        |                           |
+Generate Response             Assign Human Agent
+        |                           |
+Update Ticket Status           Manual Resolution
+        |                           |
+Collect Feedback               Close Ticket
+```
+
+### Resolution Rules
+- **Confidence ≥ 0.75** → Auto-resolve
+- **Confidence < 0.75** → Escalate to human agent
+
+This design ensures automation is **safe, conservative, and trustworthy**.
 
 ---
 
