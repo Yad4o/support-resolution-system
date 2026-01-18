@@ -1,324 +1,820 @@
-📘 Automated Customer Support Resolution System
-Technical Specification Document
-1. Overview
-1.1 Project Name
+# Automated Customer Support Resolution System  
+## Technical Specification Document
 
-Automated Customer Support Resolution System
+---
 
-1.2 Authors / Owners
+## 1. Introduction
 
-Om Yadav – Backend Architecture, APIs, Database, System Design
+### 1.1 Purpose of This Document
 
-Prajwal – AI / NLP, Similarity Search, Decision Logic
+This document provides a **complete technical specification** for the
+**Automated Customer Support Resolution System**.
 
-1.3 Objective
+It explains:
+- System goals and scope
+- Architecture and design decisions
+- Responsibilities of each module
+- Data models and workflows
+- AI and decision-making logic
+- Security and scalability considerations
 
-The goal of this system is to automatically resolve customer support tickets using AI-driven intent classification, similarity matching, and rule-based decision logic, while safely escalating uncertain cases to human agents.
+This document is intended for:
+- Developers
+- Reviewers
+- Interviewers
+- Future maintainers
 
-The system aims to:
+---
 
-Reduce manual support workload
+## 1.2 System Objective
 
-Improve response time
+The system automates **first-level customer support** by:
+- Understanding customer issues
+- Resolving common problems automatically
+- Escalating uncertain cases to humans
+- Learning from historical resolutions
 
-Maintain safety and correctness via conservative decision thresholds
+The goal is **assistance, not replacement**, of human agents.
 
-2. Problem Statement
+---
 
-Traditional customer support systems:
+## 2. Problem Statement
 
-Require large human teams
+Customer support teams face:
+- High volumes of repetitive tickets
+- Slow response times
+- Inefficient routing
+- High operational cost
 
-Respond slowly to repetitive issues
+Many issues (login problems, payment failures, basic FAQs) are **predictable** and **repeatable**.
 
-Do not learn efficiently from past resolutions
+This system:
+- Automates predictable cases
+- Reduces workload on human agents
+- Improves response time
+- Maintains safety through conservative AI decisions
 
-This system solves:
+---
 
-Repeated questions (login, payment, refunds)
+## 3. System Scope
 
-Delayed response times
+### 3.1 In Scope
+- Ticket creation and tracking
+- Intent classification using NLP
+- Similarity search with past tickets
+- Automated response generation
+- Confidence-based escalation
+- Feedback collection
+- Admin monitoring APIs
 
-Inefficient ticket routing
+### 3.2 Out of Scope
+- Fully autonomous support without humans
+- Real-time chat UI
+- Automatic model retraining
+- Voice support (future extension)
 
-3. High-Level Architecture
-3.1 Architecture Style
+---
 
-Layered Architecture
+## 4. High-Level Architecture
 
-Service-Oriented Design
+### 4.1 Architecture Style
 
-API-first Backend
+- Layered Architecture
+- Service-Oriented Design
+- API-First Backend
 
-3.2 Core Layers
+### 4.2 Architecture Diagram (Conceptual)
+```
 Client
-  ↓
-API Layer (FastAPI)
-  ↓
-Service Layer (AI / Decision Logic)
-  ↓
-Data Layer (SQLAlchemy ORM)
-  ↓
+↓
+FastAPI API Layer
+↓
+Service Layer (AI + Decision Logic)
+↓
+Data Layer (ORM)
+↓
 Database
+```
 
-4. Technology Stack
-4.1 Backend
+Each layer has **strict responsibility boundaries**.
 
-Language: Python 3.10+
+---
 
-Framework: FastAPI
+## 5. Layer Responsibilities
 
-ASGI Server: Uvicorn
+### 5.1 API Layer (`app/api`)
 
-4.2 Database
+Responsibilities:
+- Handle HTTP requests
+- Validate input using schemas
+- Orchestrate service calls
+- Return HTTP responses
 
-ORM: SQLAlchemy
+Must NOT:
+- Contain AI logic
+- Make decisions
+- Implement business rules
 
-Default DB: SQLite
+---
 
-Production-ready DB: PostgreSQL
+### 5.2 Service Layer (`app/services`)
 
-4.3 AI / NLP
+Responsibilities:
+- Intent classification
+- Similarity matching
+- Response generation
+- Decision making
 
-Initial MVP:
+Must NOT:
+- Access HTTP directly
+- Manage DB sessions
+- Handle authentication
 
-Rule-based classification
+---
 
-TF-IDF similarity
+### 5.3 Data Layer (`app/models`, `app/db`)
 
-Future:
+Responsibilities:
+- Define database schema
+- Persist entities
+- Manage DB sessions
 
-spaCy / Sentence Transformers
+Must NOT:
+- Contain business logic
+- Contain AI logic
 
-OpenAI / LLM APIs
+---
 
-4.4 Authentication
+### 5.4 Schema Layer (`app/schemas`)
 
-JWT-based authentication
+Responsibilities:
+- Validate incoming data
+- Shape outgoing responses
+- Protect sensitive fields
 
-Password hashing with bcrypt
+Must NOT:
+- Touch database
+- Implement logic
 
-5. Folder Structure (Final)
+---
+
+## 6. Project Structure
+
+```
 app/
-├── main.py
-├── api/
-│   ├── auth.py
-│   ├── tickets.py
-│   ├── feedback.py
-│   └── admin.py
-├── core/
-│   ├── config.py
-│   └── security.py
-├── db/
-│   └── session.py
-├── models/
-│   ├── user.py
-│   ├── ticket.py
-│   └── feedback.py
-├── schemas/
-│   ├── user.py
-│   ├── ticket.py
-│   └── feedback.py
-├── services/
-│   ├── classifier.py
-│   ├── similarity.py
-│   ├── resolver.py
-│   └── decision.py
+├── main.py # Application entry point
+│
+├── api/ # HTTP API layer
+│ ├── auth.py
+│ ├── tickets.py
+│ ├── feedback.py
+│ └── admin.py
+│
+├── core/ # Core utilities
+│ ├── config.py
+│ └── security.py
+│
+├── db/ # Database setup
+│ └── session.py
+│
+├── models/ # ORM models
+│ ├── user.py
+│ ├── ticket.py
+│ └── feedback.py
+│
+├── schemas/ # API schemas
+│ ├── user.py
+│ ├── ticket.py
+│ └── feedback.py
+│
+├── services/ # AI & business logic
+│ ├── classifier.py
+│ ├── similarity.py
+│ ├── resolver.py
+│ └── decision.py
+│
 tests/
 workers/
+```
 
-6. Data Models
-6.1 User Model
-Field	Type	Description
-id	int	Primary key
-email	string	Unique user identifier
-hashed_password	string	Secure password hash
-role	string	user / agent / admin
-6.2 Ticket Model
-Field	Type	Description
-id	int	Ticket ID
-message	string	Raw customer message
-intent	string	AI-predicted intent
-confidence	float	Confidence score
-status	string	open / auto_resolved / escalated
-created_at	datetime	Ticket creation time
-6.3 Feedback Model
-Field	Type	Description
-id	int	Feedback ID
-ticket_id	int	Related ticket
-rating	int	User rating
-resolved	bool	Resolution success
-created_at	datetime	Feedback timestamp
-7. API Specifications
-7.1 Authentication API
-POST /auth/login
+---
 
-Purpose: Authenticate user and issue JWT token
+## 7. Data Models
 
-Request
+### 7.1 User
 
-{
-  "email": "user@example.com",
-  "password": "password123"
-}
+Purpose: Authentication and authorization.
 
+Fields:
+- id (primary key)
+- email (unique)
+- hashed_password
+- role (user / agent / admin)
 
-Response
+---
 
-{
-  "access_token": "jwt-token",
-  "token_type": "bearer"
-}
+### 7.2 Ticket
 
-7.2 Ticket APIs
-POST /tickets
+Purpose: Represents a customer support request.
 
-Create new support ticket
+Fields:
+- id
+- message
+- intent
+- confidence
+- status
+- created_at
 
-GET /tickets/{id}
+Statuses:
+- open
+- auto_resolved
+- escalated
+- closed
 
-Fetch ticket details
+---
 
-POST /tickets/{id}/resolve
+### 7.3 Feedback
 
-Trigger automated resolution
+Purpose: Measures quality of resolutions.
 
-7.3 Feedback API
-POST /feedback/{ticket_id}
+Fields:
+- id
+- ticket_id
+- rating
+- resolved
+- created_at
 
-Submit resolution feedback
+---
 
-7.4 Admin API
-GET /admin/metrics
+## 8. Ticket Lifecycle
 
-System-wide metrics:
+```
+Ticket Created (OPEN)
+|
+v
+Intent Classification
+|
+v
+Similarity Search
+|
+v
+Decision Engine
+|
++---------------------------+
+| |
+v v
+AUTO_RESOLVE ESCALATE
+| |
+Generate Response Assign Human Agent
+| |
+Update Status Manual Resolution
+| |
+Collect Feedback Close Ticket
+```
 
-Ticket counts
+---
 
-Resolution ratios
+## 9. AI & Automation Flow
 
-Average ratings
+### 9.1 Intent Classification
 
-8. AI & Decision Logic
-8.1 Intent Classification
-
-Input: Raw text
+Input:
+- Raw ticket message
 
 Output:
+- Intent label
+- Confidence score (0.0 – 1.0)
 
+Example:
+```json
 {
   "intent": "login_issue",
   "confidence": 0.82
 }
+```
+## 9.2 Similarity Search
 
-8.2 Similarity Search
+### Purpose
 
-Uses past resolved tickets
+Similarity search is used to identify whether a newly created ticket
+is **similar to any previously resolved ticket**.
 
-Returns best match if similarity ≥ threshold
+The core idea is:
+> If a problem has already been solved successfully before, reuse that solution instead of generating a new one.
 
-8.3 Response Generation
+This improves:
+- Accuracy
+- Consistency
+- Response time
+- Safety (known solutions are trusted)
 
-Reuse known solutions first
+---
 
-Intent-based templates
+### Why Similarity Search Is Needed
 
-Optional AI-generated responses
+Intent classification alone is not sufficient.
 
-8.4 Decision Engine
-Confidence	Action
-≥ 0.75	Auto-resolve
-< 0.75	Escalate
-9. Ticket Lifecycle
-OPEN
- ↓
-AI Classification
- ↓
-Decision Engine
- ↓
-AUTO_RESOLVED ──► Feedback
- ↓
-ESCALATED ──► Human Agent
+Example:
+- Ticket A: “I cannot login to my account”
+- Ticket B: “Login not working since yesterday”
 
-10. Security Considerations
+Both may map to `login_issue`, but the **exact resolution** might already
+exist for Ticket A.
 
-Password hashing (bcrypt)
+Similarity search allows:
+- Reusing proven responses
+- Avoiding hallucinated or incorrect AI responses
+- Reducing compute cost
 
-JWT-based stateless auth
+---
 
-No plain-text secrets
+### Inputs
 
-No AI decisions without confidence thresholds
+- **New ticket message** (raw user text)
+- **List of previously resolved ticket messages**
 
-11. Error Handling Strategy
+The API layer fetches resolved tickets from the database and passes them
+to the similarity service.
 
-Consistent HTTP status codes
+---
 
-Clear error messages
+### Outputs
 
-Safe fallbacks for AI failures
+If a similar ticket is found:
 
-12. Scalability & Future Enhancements
-Short Term
+```json
+{
+  "matched_text": "I cannot login to my account",
+  "similarity_score": 0.81
+}
+```
+If no suitable match is found:
+```
+null
+```
+## 9.3 Response Generation
 
-PostgreSQL migration
+### Purpose
 
-Background workers
+Response Generation is responsible for creating the **final human-readable reply**
+that is sent back to the customer after analysis is complete.
 
-Better intent models
+This component answers the question:
 
-Long Term
+> “What should the system say to the user?”
 
-Vector DB (FAISS)
+It focuses on **clarity, correctness, and safety**, not on decision-making.
 
-Continuous learning
+---
 
-Multi-language support
+### Responsibilities
 
-Voice-to-text tickets
+The response generation component is responsible for:
 
-13. Testing Strategy
+- Producing clear and polite responses
+- Reusing previously successful solutions when available
+- Generating deterministic replies for common intents
+- Providing safe fallback responses when confidence is low
 
-Unit tests for services
+---
 
-API tests for routes
+### What This Component Must NOT Do
 
-Mock AI responses
+- Decide whether a ticket should be auto-resolved
+- Update ticket status in the database
+- Access database sessions
+- Call FastAPI endpoints
 
-Edge-case confidence tests
+This component **only returns text**.
 
-14. Deployment Plan
+---
 
-Dockerized FastAPI app
+### Inputs
 
-Environment-based configs
+- **intent**  
+  Predicted intent label (e.g., `login_issue`, `payment_issue`)
 
-CI/CD via GitHub Actions
+- **original_message**  
+  Raw customer message for context
 
-Cloud deployment (Render / Railway)
+- **similar_solution (optional)**  
+  A solution reused from a similar previously resolved ticket
 
-15. Resume / Interview Value
+---
 
-Designed and implemented an AI-powered automated customer support resolution backend using FastAPI, Python, and NLP, featuring intent classification, similarity search, confidence-based decision logic, and safe escalation workflows.
+### Response Priority Order
 
-16. Final Notes
+Responses are generated using the following priority:
 
-This system is:
+1. **Reuse Similar Ticket Solution**  
+   - Highest priority  
+   - Proven to work  
+   - Improves consistency and trust  
 
-Modular
+2. **Intent-Based Static Responses**  
+   - Safe, deterministic templates  
+   - Easy to audit and maintain  
 
-Safe
+3. **AI-Generated Responses (Future)**  
+   - Used only when confidence is high  
+   - Requires safeguards against hallucinations  
 
-Production-inspired
+4. **Fallback Response**  
+   - Used when intent is unknown or confidence is insufficient  
 
-Interview-ready
+---
 
-It demonstrates:
+### Example Response
 
-Backend engineering
+```
+"It looks like you're having trouble logging in.
+Please try resetting your password using the
+'Forgot Password' option on the login page."
+```
 
-AI integration
+---
 
-System design thinking
+### Safety Considerations
 
-Team collaboration
+- No assumptions beyond provided information
+- No sensitive or irreversible instructions
+- Conservative wording
+- Encourages human escalation when uncertain
+
+---
+
+## 9.4 Decision Engine
+
+### Purpose
+
+The Decision Engine determines **whether a ticket should be handled automatically
+or escalated to a human agent**.
+
+This is the **primary safety control layer** of the system.
+
+---
+
+### Why Decision Logic Is Isolated
+
+AI predictions are probabilistic and can be incorrect.
+
+Separating decision logic:
+
+- Prevents blind trust in AI
+- Allows business-controlled thresholds
+- Enables auditing and explainability
+- Reduces operational risk
+
+---
+
+### Inputs
+
+- **confidence score**  
+  A floating-point value between `0.0` and `1.0` returned by the classifier
+
+---
+
+### Outputs
+
+One of the following decisions:
+
+- `AUTO_RESOLVE`
+- `ESCALATE`
+
+---
+
+### Decision Rules (Initial Version)
+
+| Confidence Score | Action |
+|-----------------|--------|
+| ≥ 0.75 | Auto-resolve |
+| < 0.75 | Escalate to human |
+
+These thresholds are intentionally **conservative**.
+
+---
+
+### Validation Rules
+
+- Confidence must be within the range `0.0 – 1.0`
+- Missing or invalid confidence → **Escalate**
+- Any ambiguity → **Escalate**
+
+Safety always takes precedence over automation.
+
+---
+
+### Future Enhancements
+
+- Per-intent confidence thresholds
+- Feedback-driven threshold tuning
+- SLA-aware decisions
+- Risk-based escalation policies
+
+---
+
+## 9.5 End-to-End Automation Flow
+
+### Purpose
+
+This section explains how **all AI and decision components work together**
+from ticket creation to final resolution.
+
+It provides a complete picture of the automation pipeline.
+
+---
+
+### Step-by-Step Flow
+
+1. **Ticket Creation**
+   - User submits a support ticket
+   - Ticket status is set to `OPEN`
+
+2. **Intent Classification**
+   - Raw ticket text is analyzed
+   - Intent and confidence score are produced
+
+3. **Similarity Search**
+   - Past resolved tickets are searched
+   - A known solution may be reused
+
+4. **Decision Engine**
+   - Confidence score is evaluated
+   - Decision is made: auto-resolve or escalate
+
+5. **Response Generation**
+   - If auto-resolving:
+     - Response is generated
+     - Ticket status updated
+   - If escalating:
+     - Ticket routed to human agent
+
+6. **Feedback Collection**
+   - User provides feedback after resolution
+   - Data stored for future improvement
+
+---
+
+### Automation Guarantees
+
+- No auto-resolution without confidence validation
+- No AI decision without explicit thresholds
+- Every uncertain case is escalated
+- Human agents always remain in control
+
+---
+
+### Key Design Principle
+
+> Automation should assist humans, not replace them.
+
+This flow ensures the system remains **trustworthy, auditable, and safe**.
+## 10. Security Design
+
+### Purpose
+
+Security is a core requirement of this system because it handles:
+- User credentials
+- Internal system logic
+- Automated decision-making
+
+The design follows **security-by-default** principles.
+
+---
+
+### 10.1 Authentication
+
+- JWT-based stateless authentication is used
+- Tokens are issued only after successful login
+- Each token contains:
+  - User ID
+  - User role
+- Tokens have expiration time
+
+Benefits:
+- No server-side session storage
+- Easy horizontal scaling
+- Secure and industry-standard
+
+---
+
+### 10.2 Password Handling
+
+- Passwords are **never stored in plain text**
+- Passwords are hashed using **bcrypt**
+- Verification is done via hash comparison only
+
+At no point is the original password retrievable.
+
+---
+
+### 10.3 Authorization
+
+- Role-based access control (RBAC)
+- Admin endpoints restricted to admin users
+- Regular users cannot access system metrics
+
+Authorization checks are enforced at the API layer.
+
+---
+
+### 10.4 AI Safety Controls
+
+- No auto-resolution without confidence validation
+- No AI output directly changes system state
+- Decision engine always acts as a gatekeeper
+- Any uncertainty leads to escalation
+
+This prevents unsafe automation.
+
+---
+
+## 11. Error Handling Strategy
+
+### Purpose
+
+The system must fail **safely and predictably**.
+
+Errors should:
+- Be understandable
+- Never leak internal details
+- Allow graceful recovery
+
+---
+
+### 11.1 Error Categories
+
+| Error Type | HTTP Status |
+|----------|------------|
+| Validation Error | 400 |
+| Authentication Error | 401 |
+| Authorization Error | 403 |
+| Resource Not Found | 404 |
+| AI / Service Failure | 200 with fallback |
+| Internal Server Error | 500 |
+
+---
+
+### 11.2 AI Failure Handling
+
+If any AI service fails:
+- Skip automated resolution
+- Escalate ticket to human
+- Log the failure for review
+
+The system **never blocks users** due to AI failure.
+
+---
+
+### 11.3 Logging Strategy
+
+- Errors are logged internally
+- No stack traces exposed to clients
+- Logs can be used for monitoring and audits
+
+---
+
+## 12. Configuration Management
+
+### Purpose
+
+Configuration must be:
+- Centralized
+- Environment-specific
+- Secure
+
+---
+
+### 12.1 Environment-Based Configuration
+
+- All secrets stored in environment variables
+- `.env` file used only for development
+- `.env` is never committed to GitHub
+
+---
+
+### 12.2 Centralized Configuration
+
+- Managed via `config.py`
+- Loaded once and cached
+- Single source of truth for settings
+
+Benefits:
+- Consistency across services
+- Easier debugging
+- Cleaner codebase
+
+---
+
+## 13. Scalability Considerations
+
+### 13.1 Short-Term Scalability
+
+- SQLite → PostgreSQL
+- Background workers for heavy tasks
+- Caching frequently accessed data
+
+---
+
+### 13.2 Long-Term Scalability
+
+- Vector databases (FAISS / Pinecone)
+- Distributed service architecture
+- Horizontal scaling of API servers
+- Asynchronous processing pipelines
+
+---
+
+## 14. Testing Strategy
+
+### Purpose
+
+Testing ensures:
+- Reliability
+- Predictability
+- Confidence in automation
+
+---
+
+### 14.1 Unit Testing
+
+- Intent classification logic
+- Similarity scoring
+- Decision engine thresholds
+- Response generation
+
+---
+
+### 14.2 Integration Testing
+
+- Full ticket lifecycle
+- API endpoints
+- Error scenarios
+- Edge cases
+
+---
+
+### 14.3 Mocking Strategy
+
+- AI responses are mocked
+- Deterministic test outcomes
+- Threshold edge-case testing
+
+---
+
+## 15. Deployment Plan
+
+### 15.1 Build Strategy
+
+- FastAPI application is Docker-ready
+- Dependencies pinned via `requirements.txt`
+- Environment variables injected at runtime
+
+---
+
+### 15.2 CI/CD Pipeline
+
+- GitHub Actions for:
+  - Linting
+  - Testing
+  - Build validation
+- Automatic deployment on successful checks
+
+---
+
+### 15.3 Hosting
+
+- Render / Railway / AWS
+- HTTPS enforced
+- Environment-specific configs
+
+---
+
+## 16. Non-Goals
+
+This system intentionally does NOT:
+- Fully replace human support
+- Automatically retrain AI models
+- Make irreversible decisions
+- Operate without confidence thresholds
+
+These constraints are deliberate for safety.
+
+---
+
+## 17. Conclusion
+
+The Automated Customer Support Resolution System demonstrates:
+
+- Clean backend architecture
+- Responsible AI integration
+- Safety-first automation
+- Professional system design
+
+It is suitable for:
+- Portfolio demonstration
+- Technical interviews
+- Real-world inspiration
+- Team collaboration projects
+
+The system is designed to **assist humans, not replace them**.
