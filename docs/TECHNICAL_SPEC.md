@@ -1,5 +1,62 @@
 # Automated Customer Support Resolution System  
-## Technical Specification Document
+## Technical Specification
+
+---
+
+## Overview
+
+The **Automated Customer Support Resolution System** is a backend service designed to
+automate **first-level customer support** using AI-assisted workflows.
+
+The system analyzes customer support tickets, identifies the intent of the issue,
+searches for similar previously resolved tickets, and generates automated responses
+when it is safe to do so. If confidence is low, the system escalates the ticket to a
+human agent.
+
+The primary goal of this project is to **reduce repetitive support workload** while
+maintaining **safety, accuracy, and human control**.
+
+---
+
+## Credits
+
+This project is a collaborative effort with clear responsibility ownership.
+
+- **Om Yadav**  
+  *Backend Architecture, API Design, Database, Security, System Design, Documentation*
+
+- **Prajwal**  
+  *AI / NLP Logic, Similarity Search, Response Generation, Decision Engine*
+
+---
+
+## Table of Contents
+
+- [1. Introduction](#1-introduction)
+- [2. Problem Statement](#2-problem-statement)
+- [3. System Scope](#3-system-scope)
+- [4. High-Level Architecture](#4-high-level-architecture)
+- [5. Layer Responsibilities](#5-layer-responsibilities)
+- [6. Project Structure](#6-project-structure)
+- [7. Data Models](#7-data-models)
+- [8. Ticket Lifecycle](#8-ticket-lifecycle)
+- [9. AI and Automation Flow](#9-ai-and-automation-flow)
+  - [9.1 Intent Classification](#91-intent-classification)
+  - [9.2 Similarity Search](#92-similarity-search)
+  - [9.3 Response Generation](#93-response-generation)
+  - [9.4 Decision Engine](#94-decision-engine)
+  - [9.5 End-to-End Automation Flow](#95-end-to-end-automation-flow)
+- [10. Security Design](#10-security-design)
+- [11. Error Handling Strategy](#11-error-handling-strategy)
+- [12. Configuration Management](#12-configuration-management)
+- [13. Scalability Considerations](#13-scalability-considerations)
+- [14. Testing Strategy](#14-testing-strategy)
+- [15. Deployment Plan](#15-deployment-plan)
+- [16. Non-Goals](#16-non-goals)
+- [17. Conclusion](#17-conclusion)
+
+---
+
 
 ---
 
