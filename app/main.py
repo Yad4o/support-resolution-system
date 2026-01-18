@@ -1,27 +1,64 @@
+"""
+app/main.py
+
+Application entry point for the Automated Customer Support Resolution System.
+
+This file is responsible ONLY for:
+- Creating the FastAPI application
+- Registering middleware
+- Attaching API routers
+- Managing startup and shutdown events
+
+⚠️ IMPORTANT:
+- Do NOT put business logic here
+- Do NOT access the database directly here
+- Do NOT implement AI logic here
+"""
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# TODO: import routers
+# TODO (later): import routers when they are implemented
 # from app.api import auth, tickets, feedback, admin
 
-# TODO: import settings
+# TODO (later): import settings
 # from app.core.config import settings
 
 
 def create_app() -> FastAPI:
     """
     Application factory.
-    Creates and configures the FastAPI app.
+
+    Why factory pattern?
+    - Easier testing
+    - Cleaner dependency injection
+    - Production-ready architecture
+
+    Returns:
+        FastAPI: Configured FastAPI application
     """
+
     app = FastAPI(
         title="Automated Customer Support Resolution System",
-        description="Backend service for auto-resolving customer support tickets using AI",
+        description=(
+            "Backend service that automatically classifies, "
+            "resolves, and escalates customer support tickets "
+            "using AI-driven decision logic."
+        ),
         version="0.1.0",
     )
 
-    # -----------------------------
-    # TODO: Middleware configuration
-    # -----------------------------
+    # --------------------------------------------------
+    # Middleware Configuration
+    # --------------------------------------------------
+
+    """
+    CORS Middleware
+
+    TODO (production):
+    - Restrict allowed origins
+    - Allow only required headers
+    """
 
     app.add_middleware(
         CORSMiddleware,
@@ -31,54 +68,90 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # -----------------------------
-    # TODO: Include API routers
-    # -----------------------------
+    # --------------------------------------------------
+    # Router Registration
+    # --------------------------------------------------
 
+    """
+    API Routers
+
+    Each router handles a separate domain:
+    - auth      → authentication & authorization
+    - tickets   → ticket lifecycle
+    - feedback  → user feedback
+    - admin     → admin metrics & controls
+    """
+
+    # TODO: Uncomment these once routers are implemented
     # app.include_router(auth.router, prefix="/auth", tags=["Auth"])
     # app.include_router(tickets.router, prefix="/tickets", tags=["Tickets"])
     # app.include_router(feedback.router, prefix="/feedback", tags=["Feedback"])
     # app.include_router(admin.router, prefix="/admin", tags=["Admin"])
 
-    # -----------------------------
-    # TODO: Startup & shutdown events
-    # -----------------------------
+    # --------------------------------------------------
+    # Application Lifecycle Events
+    # --------------------------------------------------
 
     @app.on_event("startup")
-    async def startup_event():
+    async def on_startup() -> None:
         """
-        Runs when the application starts.
+        Runs once when the application starts.
+
+        Typical startup tasks:
+        - Initialize database connections
+        - Connect to Redis / cache
+        - Warm up AI models (optional)
         """
-        # TODO: Initialize database connection
-        # TODO: Warm up AI models (optional)
-        # TODO: Connect to Redis (if used)
+
+        # TODO:
+        # - Initialize DB engine
+        # - Validate environment variables
+        # - Log startup success
         pass
 
     @app.on_event("shutdown")
-    async def shutdown_event():
+    async def on_shutdown() -> None:
         """
-        Runs when the application shuts down.
+        Runs once when the application shuts down.
+
+        Typical shutdown tasks:
+        - Close database connections
+        - Gracefully stop background workers
         """
-        # TODO: Close database connection
-        # TODO: Gracefully shutdown background workers
+
+        # TODO:
+        # - Close DB connections
+        # - Shutdown background tasks
         pass
 
     return app
 
 
-# Create app instance
+# --------------------------------------------------
+# Application Instance
+# --------------------------------------------------
+
 app = create_app()
 
 
-# -----------------------------
-# Health Check
-# -----------------------------
+# --------------------------------------------------
+# Health Check Endpoint
+# --------------------------------------------------
+
 @app.get("/health", tags=["Health"])
-async def health_check():
+async def health_check() -> dict:
     """
-    Health check endpoint for monitoring.
+    Health check endpoint.
+
+    Used by:
+    - Load balancers
+    - Monitoring systems
+    - CI/CD pipelines
+
+    Returns:
+        dict: Basic service health information
     """
     return {
         "status": "ok",
-        "service": "customer-support-resolution",
+        "service": "automated-customer-support",
     }

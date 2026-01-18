@@ -1,0 +1,89 @@
+"""
+app/models/ticket.py
+
+Purpose:
+--------
+Defines the Ticket database model.
+
+Owner:
+------
+Om (Backend / Data Modeling)
+
+Responsibilities:
+-----------------
+- Represent customer support tickets
+- Store AI classification results
+- Track ticket lifecycle status
+
+DO NOT:
+-------
+- Perform AI classification here
+- Implement resolution logic here
+- Write database queries here
+"""
+
+from datetime import datetime
+from sqlalchemy import Column, Integer, String, Float, DateTime
+
+from app.db.session import Base
+
+
+class Ticket(Base):
+    """
+    Ticket ORM model.
+
+    Each ticket represents a single customer support request
+    submitted by a user.
+    """
+
+    __tablename__ = "tickets"
+
+    # -------------------------------------------------
+    # Columns
+    # -------------------------------------------------
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True,
+        doc="Primary key identifier for the ticket",
+    )
+
+    message = Column(
+        String,
+        nullable=False,
+        doc="Original customer message",
+    )
+
+    intent = Column(
+        String,
+        nullable=True,
+        doc="Predicted intent (e.g., login_issue, payment, refund)",
+    )
+
+    confidence = Column(
+        Float,
+        nullable=True,
+        doc="AI confidence score for predicted intent (0.0 - 1.0)",
+    )
+
+    status = Column(
+        String,
+        default="open",
+        nullable=False,
+        doc="Ticket status: open | auto_resolved | escalated | closed",
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+        doc="Timestamp when the ticket was created",
+    )
+
+    # -------------------------------------------------
+    # TODO (Future Enhancements)
+    # -------------------------------------------------
+    # - updated_at timestamp
+    # - resolved_at timestamp
+    # - user_id (foreign key)
