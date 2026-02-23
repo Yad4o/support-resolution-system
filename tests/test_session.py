@@ -341,14 +341,16 @@ class TestDatabaseSchemaValidation:
     @pytest.mark.skipif(init_db is None, reason="init_db not available in this session.py")
     def test_foreign_key_query_parses(self):
         """Test that PRAGMA foreign_keys query works (doesn't verify enforcement)."""
-        if "sqlite" in str(engine.url):
-            # Check if the PRAGMA foreign_keys query executes successfully
-            # This test verifies the query works, not that FKs are enabled
-            with engine.connect() as conn:
-                result = conn.execute(text("PRAGMA foreign_keys"))
-                fk_enabled = result.scalar()
-                # Query should return 0 (disabled) or 1 (enabled)
-                assert fk_enabled in [0, 1], f"PRAGMA should return 0 or 1 but got {fk_enabled}"
+        if "sqlite" not in str(engine.url):
+            pytest.skip("PRAGMA foreign_keys is SQLite-only")
+        
+        # Check if the PRAGMA foreign_keys query executes successfully
+        # This test verifies the query works, not that FKs are enabled
+        with engine.connect() as conn:
+            result = conn.execute(text("PRAGMA foreign_keys"))
+            fk_enabled = result.scalar()
+            # Query should return 0 (disabled) or 1 (enabled)
+            assert fk_enabled in [0, 1], f"PRAGMA should return 0 or 1 but got {fk_enabled}"
 
     @pytest.mark.skipif(init_db is None, reason="init_db not available in this session.py")
     def test_table_columns_exist(self):
