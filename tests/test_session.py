@@ -130,28 +130,17 @@ class TestEngine:
     def test_engine_has_correct_url(self):
         """Engine should use the DATABASE_URL from settings."""
         from app.core.config import get_settings
-        from urllib.parse import urlparse
+        from sqlalchemy.engine import make_url
         settings = get_settings()
         
-        # Parse both URLs to compare components safely
-        settings_parsed = urlparse(settings.DATABASE_URL)
-        engine_parsed = engine.url
+        # Parse settings URL using SQLAlchemy's canonical parser
+        expected = make_url(settings.DATABASE_URL)
         
-        # Compare driver/database type
-        assert engine_parsed.drivername == settings_parsed.scheme
-        
-        # Compare database name/path
-        if settings_parsed.path and settings_parsed.path != "/":
-            # Extract database name from path (remove leading slash)
-            settings_db_name = settings_parsed.path.lstrip('/')
-            if engine_parsed.database:
-                assert engine_parsed.database == settings_db_name
-            else:
-                # For SQLite, database might be in the host/path
-                assert settings_db_name in str(engine_parsed)
-        else:
-            # If no specific database in settings, ensure engine has one
-            assert engine_parsed.database is not None
+        # Compare URL components consistently
+        assert engine.url.drivername == expected.drivername
+        assert engine.url.database == expected.database
+        assert engine.url.host == expected.host
+        assert engine.url.port == expected.port
 
     def test_engine_echo_in_debug_mode(self):
         """Engine should echo SQL when DEBUG is True."""
