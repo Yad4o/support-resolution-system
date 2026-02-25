@@ -23,7 +23,8 @@ DO NOT:
 """
 
 from datetime import datetime
-from sqlalchemy import Column, Integer, Boolean, DateTime
+from sqlalchemy import Column, Integer, Boolean, DateTime, ForeignKey
+from sqlalchemy.orm import relationship
 
 from app.db.session import Base
 
@@ -51,8 +52,9 @@ class Feedback(Base):
 
     ticket_id = Column(
         Integer,
+        ForeignKey('tickets.id'),
         nullable=False,
-        doc="ID of the ticket this feedback belongs to",
+        doc="ID of ticket this feedback belongs to",
     )
 
     rating = Column(
@@ -75,7 +77,12 @@ class Feedback(Base):
     )
 
     # -------------------------------------------------
+    # Relationships
+    # -------------------------------------------------
+    
+    ticket = relationship("Ticket", backref="feedback")
+
+    # -------------------------------------------------
     # TODO (Future Enhancements)
     # -------------------------------------------------
-    # - foreign key constraint to tickets
     # - sentiment score
