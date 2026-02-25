@@ -39,6 +39,10 @@ class Feedback(Base):
 
     __tablename__ = "feedback"
 
+    def __repr__(self):
+        """Return a meaningful string representation of the feedback."""
+        return f"<Feedback(id={self.id}, ticket_id={self.ticket_id}, rating={self.rating}, resolved={self.resolved})>"
+
     # -------------------------------------------------
     # Columns
     # -------------------------------------------------

@@ -141,9 +141,37 @@ class TestFeedbackModel:
         """Feedback should have meaningful string representation."""
         feedback = Feedback(ticket_id=1, rating=5, resolved=True)
         
-        # Should be a valid object representation
-        str_repr = str(feedback)
-        assert "Feedback object" in str_repr
+        # Should have a meaningful __repr__ format
+        repr_str = repr(feedback)
+        assert "Feedback" in repr_str
+        assert "ticket_id=1" in repr_str
+        assert "rating=5" in repr_str
+        assert "resolved=True" in repr_str
+        
+        # When id is None (not saved yet), it should show as None
+        assert "id=None" in repr_str
+
+    def test_feedback_string_representation_with_id(self):
+        """Feedback __repr__ should show actual ID when saved to database."""
+        with Session(engine) as db:
+            # Create a ticket first
+            ticket = Ticket(message="Test ticket for repr")
+            db.add(ticket)
+            db.commit()
+            db.refresh(ticket)
+            
+            # Create and save feedback
+            feedback = Feedback(ticket_id=ticket.id, rating=4, resolved=True)
+            db.add(feedback)
+            db.commit()
+            db.refresh(feedback)
+            
+            # Now __repr__ should show the actual ID
+            repr_str = repr(feedback)
+            assert f"id={feedback.id}" in repr_str
+            assert "ticket_id=" + str(ticket.id) in repr_str
+            assert "rating=4" in repr_str
+            assert "resolved=True" in repr_str
 
     def test_feedback_database_persistence(self):
         """Should persist feedback to database correctly."""
