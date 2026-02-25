@@ -141,6 +141,7 @@ class TestFeedbackModel:
         """Feedback should have meaningful string representation."""
         feedback = Feedback(ticket_id=1, rating=5, resolved=True)
         
+<<<<<<< HEAD
         # Should have a meaningful __repr__ format
         repr_str = repr(feedback)
         assert "Feedback" in repr_str
@@ -172,6 +173,11 @@ class TestFeedbackModel:
             assert "ticket_id=" + str(ticket.id) in repr_str
             assert "rating=4" in repr_str
             assert "resolved=True" in repr_str
+=======
+        # Should be a valid object representation
+        str_repr = str(feedback)
+        assert "Feedback object" in str_repr
+>>>>>>> 766109b04ef425b005d195694752a94f13250f37
 
     def test_feedback_database_persistence(self):
         """Should persist feedback to database correctly."""
