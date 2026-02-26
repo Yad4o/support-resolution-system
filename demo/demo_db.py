@@ -26,7 +26,7 @@ from app.db.session import engine, SessionLocal, init_db
 from app.models.user import User
 from app.models.ticket import Ticket
 from app.models.feedback import Feedback
-from sqlalchemy import text, inspect
+from sqlalchemy import text, inspect, func
 
 
 def show_database_info():
@@ -143,11 +143,15 @@ def create_sample_data():
         session.commit()
         print("✅ Created 3 sample tickets")
         
-        # Create sample feedback
+        # Get the actual ticket IDs from the created tickets
+        created_tickets = session.query(Ticket).all()
+        ticket_ids = [ticket.id for ticket in created_tickets]
+        
+        # Create sample feedback using actual ticket IDs
         feedback = [
-            Feedback(ticket_id=1, rating=5, resolved=True),
-            Feedback(ticket_id=2, rating=3, resolved=False),
-            Feedback(ticket_id=3, rating=4, resolved=True),
+            Feedback(ticket_id=ticket_ids[0], rating=5, resolved=True),
+            Feedback(ticket_id=ticket_ids[1], rating=3, resolved=False),
+            Feedback(ticket_id=ticket_ids[2], rating=4, resolved=True),
         ]
         
         for fb in feedback:
@@ -241,17 +245,17 @@ def run_queries():
     try:
         # Query 1: Count by status
         print("\n📈 Tickets by Status:")
-        status_counts = session.query(Ticket.status, session.query(Ticket).filter_by(status=Ticket.status).count()).group_by(Ticket.status).all()
+        status_counts = session.query(Ticket.status, func.count(Ticket.id)).group_by(Ticket.status).all()
         for status, count in status_counts:
             print(f"  • {status}: {count} tickets")
         
         # Query 2: Average feedback rating
         print("\n⭐ Average Feedback Rating:")
-        avg_rating = session.query(session.query(Feedback.rating).all()).scalar()
-        if avg_rating:
-            ratings = [r[0] for r in session.query(Feedback.rating).all()]
-            avg = sum(ratings) / len(ratings)
-            print(f"  • Average: {avg:.2f}/5")
+        avg_rating_result = session.query(func.avg(Feedback.rating)).scalar()
+        if avg_rating_result:
+            print(f"  • Average: {avg_rating_result:.2f}/5")
+        else:
+            print("  • No feedback data available")
         
         # Query 3: High confidence tickets
         print("\n🎯 High Confidence Tickets (>0.9):")

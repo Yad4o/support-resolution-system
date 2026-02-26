@@ -43,7 +43,7 @@ python demo/quick_view.py
 - ✅ List of all tables
 - ✅ Record counts per table
 - ✅ Sample data (first 3 records from each table)
-- ✅ Column names and data types
+- ✅ Column names (data types available in full demo)
 
 ---
 

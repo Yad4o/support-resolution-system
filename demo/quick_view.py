@@ -36,7 +36,12 @@ def quick_view():
         
         # Show record counts
         print("\n📊 Record Counts:")
+        # Validate table names to prevent SQL injection
+        allowed_tables = {'users', 'tickets', 'feedback'}
         for table in tables:
+            if table not in allowed_tables:
+                print(f"  • {table}: [SKIPPED - Invalid table name]")
+                continue
             result = session.execute(text(f"SELECT COUNT(*) FROM {table}"))
             count = result.scalar()
             print(f"  • {table}: {count} records")
@@ -44,6 +49,9 @@ def quick_view():
         # Show sample data from each table
         print("\n📝 Sample Data:")
         for table in tables:
+            if table not in allowed_tables:
+                print(f"\n🔸 {table.upper()}: [SKIPPED - Invalid table name]")
+                continue
             print(f"\n🔸 {table.upper()} (first 3 records):")
             try:
                 result = session.execute(text(f"SELECT * FROM {table} LIMIT 3"))
