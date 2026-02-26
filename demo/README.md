@@ -89,7 +89,7 @@ python demo/quick_view.py
 
 ### 🔗 Relationships
 
-```
+```text
 users ← (implicit) → tickets ← feedback
 ```
 
