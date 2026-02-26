@@ -36,3 +36,4 @@ See `demo/README.md` for comprehensive documentation.
 
 ## 🎯 Task 1.6 Status
 ✅ **COMPLETE** - All database tables created, tested, and documented.
+✅ **Branch**: `feat/task1.6` - https://github.com/Yad4o/SRS/tree/feat/task1.6
