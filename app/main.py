@@ -89,7 +89,7 @@ def create_app() -> FastAPI:
     # app.include_router(admin.router, prefix="/admin", tags=["Admin"])
     
     # Demo endpoints for viewing database data
-    app.include_router(demo.router, prefix="/demo", tags=["Demo"])
+    app.include_router(demo.router, tags=["Demo"])
 
     # --------------------------------------------------
     # Application Lifecycle Events

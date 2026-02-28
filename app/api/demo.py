@@ -5,7 +5,10 @@ This module provides endpoints to explore the demo data
 through the FastAPI application.
 """
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
 
@@ -15,12 +18,13 @@ from app.models.ticket import Ticket
 from app.models.feedback import Feedback
 from sqlalchemy import func, text
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/demo", tags=["Demo"])
 
 
 @router.get("/tables", response_model=Dict[str, Any])
-async def get_table_info(db: Session = Depends(get_db)):
+def get_table_info(db: Session = Depends(get_db)):
     """Get overview of all tables and record counts."""
     try:
         # Get table names
@@ -40,12 +44,13 @@ async def get_table_info(db: Session = Depends(get_db)):
             "record_counts": table_info,
             "total_records": sum(table_info.values())
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except SQLAlchemyError:
+        logger.exception("Database operation failed")
+        raise HTTPException(status_code=500, detail="Database error")
 
 
 @router.get("/users", response_model=List[Dict[str, Any]])
-async def get_users(db: Session = Depends(get_db)):
+def get_users(db: Session = Depends(get_db)):
     """Get all users with their details."""
     try:
         users = db.query(User).all()
@@ -57,12 +62,13 @@ async def get_users(db: Session = Depends(get_db)):
             }
             for user in users
         ]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except SQLAlchemyError:
+        logger.exception("Database operation failed")
+        raise HTTPException(status_code=500, detail="Database error")
 
 
 @router.get("/tickets", response_model=List[Dict[str, Any]])
-async def get_tickets(db: Session = Depends(get_db)):
+def get_tickets(db: Session = Depends(get_db)):
     """Get all tickets with AI classification details."""
     try:
         tickets = db.query(Ticket).all()
@@ -77,12 +83,13 @@ async def get_tickets(db: Session = Depends(get_db)):
             }
             for ticket in tickets
         ]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except SQLAlchemyError:
+        logger.exception("Database operation failed")
+        raise HTTPException(status_code=500, detail="Database error")
 
 
 @router.get("/feedback", response_model=List[Dict[str, Any]])
-async def get_feedback(db: Session = Depends(get_db)):
+def get_feedback(db: Session = Depends(get_db)):
     """Get all feedback with ticket relationships."""
     try:
         feedback_list = db.query(Feedback).all()
@@ -96,12 +103,13 @@ async def get_feedback(db: Session = Depends(get_db)):
             }
             for fb in feedback_list
         ]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except SQLAlchemyError:
+        logger.exception("Database operation failed")
+        raise HTTPException(status_code=500, detail="Database error")
 
 
 @router.get("/analytics", response_model=Dict[str, Any])
-async def get_analytics(db: Session = Depends(get_db)):
+def get_analytics(db: Session = Depends(get_db)):
     """Get business intelligence analytics from demo data."""
     try:
         # Tickets by status
@@ -127,12 +135,13 @@ async def get_analytics(db: Session = Depends(get_db)):
             "total_feedback": total_feedback,
             "resolution_rate": round(resolution_rate, 2)
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except SQLAlchemyError:
+        logger.exception("Database operation failed")
+        raise HTTPException(status_code=500, detail="Database error")
 
 
 @router.get("/relationships", response_model=List[Dict[str, Any]])
-async def get_feedback_with_tickets(db: Session = Depends(get_db)):
+def get_feedback_with_tickets(db: Session = Depends(get_db)):
     """Get feedback with associated ticket details (shows relationships)."""
     try:
         feedback_with_tickets = db.query(
@@ -150,28 +159,32 @@ async def get_feedback_with_tickets(db: Session = Depends(get_db)):
                 "feedback_id": fb_id,
                 "rating": rating,
                 "resolved": resolved,
-                "ticket_message": message[:100] + "..." if len(message) > 100 else message,
+                "ticket_message": (
+                    ((message or "")[:100] + "...") if len(message or "") > 100 else (message or "")
+                ),
                 "ticket_status": status,
                 "ticket_intent": intent,
                 "ticket_confidence": confidence
             }
             for fb_id, rating, resolved, message, status, intent, confidence in feedback_with_tickets
         ]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except SQLAlchemyError:
+        logger.exception("Database operation failed")
+        raise HTTPException(status_code=500, detail="Database error")
 
 
 @router.get("/summary", response_model=Dict[str, Any])
-async def get_demo_summary(db: Session = Depends(get_db)):
+def get_demo_summary(db: Session = Depends(get_db)):
     """Get complete demo data summary in one endpoint."""
     try:
         return {
-            "database_info": await get_table_info(db),
-            "users": await get_users(db),
-            "tickets": await get_tickets(db),
-            "feedback": await get_feedback(db),
-            "analytics": await get_analytics(db),
-            "relationships": await get_feedback_with_tickets(db)
+            "database_info": get_table_info(db),
+            "users": get_users(db),
+            "tickets": get_tickets(db),
+            "feedback": get_feedback(db),
+            "analytics": get_analytics(db),
+            "relationships": get_feedback_with_tickets(db)
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except SQLAlchemyError:
+        logger.exception("Database operation failed")
+        raise HTTPException(status_code=500, detail="Database error")
