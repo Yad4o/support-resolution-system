@@ -12,8 +12,9 @@ Covers:
 - Demo router is registered and reachable
 - Health route is accessible at the top level (not nested)
 """
-import pytest
-from unittest.mock import patch, MagicMock
+import inspect
+from unittest.mock import patch
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -197,7 +198,6 @@ class TestLifespan:
     def test_lifespan_function_exists(self):
         """The lifespan async context manager should be importable from main."""
         from app.main import lifespan
-        import inspect
         assert inspect.isfunction(lifespan) or callable(lifespan)
 
     def test_app_has_lifespan_set(self):

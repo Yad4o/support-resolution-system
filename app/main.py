@@ -15,6 +15,7 @@ This file is responsible ONLY for:
 - Do NOT implement AI logic here
 """
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -32,7 +33,7 @@ from app.db.session import engine, init_db
 # --------------------------------------------------
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """
     Manages the application lifecycle using an async context manager.
 
@@ -87,13 +88,9 @@ def create_app() -> FastAPI:
     # Middleware Configuration
     # --------------------------------------------------
 
-    """
-    CORS Middleware
-
-    TODO (production):
-    - Restrict allowed origins to specific domains
-    - Allow only required headers
-    """
+    # CORS Middleware
+    # TODO (production): restrict allowed origins to specific domains
+    # TODO (production): allow only required headers
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],  # TODO: restrict in production
@@ -105,16 +102,11 @@ def create_app() -> FastAPI:
     # --------------------------------------------------
     # Router Registration
     # --------------------------------------------------
-
-    """
-    API Routers
-
-    Each router handles a separate domain:
-    - auth      → authentication & authorization
-    - tickets   → ticket lifecycle
-    - feedback  → user feedback
-    - admin     → admin metrics & controls
-    """
+    # Each router handles a separate domain:
+    #   auth     → authentication & authorization
+    #   tickets  → ticket lifecycle
+    #   feedback → user feedback
+    #   admin    → admin metrics & controls
 
     # TODO: Uncomment these once routers are implemented
     # app.include_router(auth.router, prefix="/auth", tags=["Auth"])
