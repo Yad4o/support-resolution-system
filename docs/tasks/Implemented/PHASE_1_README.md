@@ -15,6 +15,7 @@ This document provides a comprehensive, line-by-line explanation of every file i
 - **`model_config = SettingsConfigDict(env_file=".env", ...)`**: Tells Pydantic to look for a `.env` file for these variables, ignore extra variables, and be case-sensitive.
 - **`APP_NAME: str = "Automated Customer Support Resolution System"`**: Default constant for the application's name.
 - **`ENV: str = "development"`**: Tracks the environment (development, staging, production). Defaults to development.
+- **`DEBUG: bool = True`**: Controls verbose logging. When `True`, SQLAlchemy's engine `echo` parameter is enabled to print all raw SQL queries to the terminal.
 - **`SECRET_KEY: str` / `DATABASE_URL: str`**: Fields without defaults. Because they have no defaults, Pydantic *requires* them to be provided in the environment or `.env` file, failing fast on startup if missing.
 - **`CONFIDENCE_THRESHOLD_AUTO_RESOLVE: float = 0.75`**: The critical threshold (75% confidence) needed for the AI engine to auto-resolve a ticket instead of escalating it.
 - **`@field_validator("CONFIDENCE_THRESHOLD_AUTO_RESOLVE")`**: A custom validation method that ensures the threshold number stays between `0.0` and `1.0`. `raise ValueError` is used if someone misconfigures it.
