@@ -25,6 +25,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # from app.api import auth, tickets, feedback, admin
 from app.api import demo
 
+from app.core.config import settings
 from app.db.session import engine, init_db
 
 
@@ -114,8 +115,10 @@ def create_app() -> FastAPI:
     # app.include_router(feedback.router, prefix="/feedback", tags=["Feedback"])
     # app.include_router(admin.router, prefix="/admin", tags=["Admin"])
 
-    # Demo endpoints for viewing database data
-    app.include_router(demo.router, tags=["Demo"])
+    # Demo endpoints — only mount in non-production environments.
+    # Set ENV=production in your environment to disable these routes.
+    if settings.ENV != "production":
+        app.include_router(demo.router, tags=["Demo"])
 
     # --------------------------------------------------
     # Health Check Endpoint
