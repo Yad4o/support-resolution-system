@@ -174,17 +174,28 @@ def get_feedback_with_tickets(db: Session = Depends(get_db)):
 
 
 @router.get("/summary", response_model=Dict[str, Any])
-def get_demo_summary(db: Session = Depends(get_db)):
-    """Get complete demo data summary in one endpoint."""
+def get_demo_summary(include_rows: bool = False, db: Session = Depends(get_db)):
+    """Get demo data summary.
+
+    Args:
+        include_rows: When True, includes full user/ticket/feedback row data.
+                      Defaults to False to keep the response payload bounded.
+    """
     try:
-        return {
+        summary: Dict[str, Any] = {
             "database_info": get_table_info(db),
-            "users": get_users(db),
-            "tickets": get_tickets(db),
-            "feedback": get_feedback(db),
             "analytics": get_analytics(db),
-            "relationships": get_feedback_with_tickets(db)
+            "relationships": get_feedback_with_tickets(db),
         }
+        if include_rows:
+            summary.update(
+                {
+                    "users": get_users(db),
+                    "tickets": get_tickets(db),
+                    "feedback": get_feedback(db),
+                }
+            )
+        return summary
     except SQLAlchemyError:
         logger.exception("Database operation failed")
         raise HTTPException(status_code=500, detail="Database error")
