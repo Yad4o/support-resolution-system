@@ -7,13 +7,15 @@ This file is responsible ONLY for:
 - Creating the FastAPI application
 - Registering middleware
 - Attaching API routers
-- Managing startup and shutdown events
+- Managing startup and shutdown events via lifespan
 
 ⚠️ IMPORTANT:
 - Do NOT put business logic here
 - Do NOT access the database directly here
 - Do NOT implement AI logic here
 """
+
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,15 +24,47 @@ from fastapi.middleware.cors import CORSMiddleware
 # from app.api import auth, tickets, feedback, admin
 from app.api import demo
 
-from app.db.session import init_db
+from app.db.session import engine, init_db
 
+
+# --------------------------------------------------
+# Application Lifespan (startup / shutdown)
+# --------------------------------------------------
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Manages the application lifecycle using an async context manager.
+
+    Replaces the deprecated @app.on_event("startup") / @app.on_event("shutdown")
+    pattern. FastAPI runs the code before `yield` on startup and after `yield`
+    on shutdown.
+
+    Startup tasks:
+    - Initialize database connections / create tables
+
+    Shutdown tasks:
+    - Dispose of SQLAlchemy engine connection pool
+    """
+    # --- Startup ---
+    init_db()
+
+    yield
+
+    # --- Shutdown ---
+    engine.dispose()
+
+
+# --------------------------------------------------
+# Application Factory
+# --------------------------------------------------
 
 def create_app() -> FastAPI:
     """
     Application factory.
 
     Why factory pattern?
-    - Easier testing
+    - Easier testing (each test can get a fresh app instance)
     - Cleaner dependency injection
     - Production-ready architecture
 
@@ -46,6 +80,7 @@ def create_app() -> FastAPI:
             "using AI-driven decision logic."
         ),
         version="0.1.0",
+        lifespan=lifespan,
     )
 
     # --------------------------------------------------
@@ -56,10 +91,9 @@ def create_app() -> FastAPI:
     CORS Middleware
 
     TODO (production):
-    - Restrict allowed origins
+    - Restrict allowed origins to specific domains
     - Allow only required headers
     """
-
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],  # TODO: restrict in production
@@ -87,40 +121,31 @@ def create_app() -> FastAPI:
     # app.include_router(tickets.router, prefix="/tickets", tags=["Tickets"])
     # app.include_router(feedback.router, prefix="/feedback", tags=["Feedback"])
     # app.include_router(admin.router, prefix="/admin", tags=["Admin"])
-    
+
     # Demo endpoints for viewing database data
     app.include_router(demo.router, tags=["Demo"])
 
     # --------------------------------------------------
-    # Application Lifecycle Events
+    # Health Check Endpoint
     # --------------------------------------------------
 
-    @app.on_event("startup")
-    async def on_startup() -> None:
+    @app.get("/health", tags=["Health"])
+    def health_check() -> dict:
         """
-        Runs once when the application starts.
+        Health check endpoint.
 
-        Typical startup tasks:
-        - Initialize database connections
-        - Connect to Redis / cache
-        - Warm up AI models (optional)
+        Used by:
+        - Load balancers
+        - Monitoring systems
+        - CI/CD pipelines
+
+        Returns:
+            dict: Basic service health information
         """
-
-        init_db()
-
-    @app.on_event("shutdown")
-    async def on_shutdown() -> None:
-        """
-        Runs once when the application shuts down.
-
-        Typical shutdown tasks:
-        - Close database connections
-        - Gracefully stop background workers
-        """
-
-        from app.db.session import engine
-
-        engine.dispose()
+        return {
+            "status": "ok",
+            "service": "automated-customer-support",
+        }
 
     return app
 
@@ -130,26 +155,3 @@ def create_app() -> FastAPI:
 # --------------------------------------------------
 
 app = create_app()
-
-
-# --------------------------------------------------
-# Health Check Endpoint
-# --------------------------------------------------
-
-@app.get("/health", tags=["Health"])
-async def health_check() -> dict:
-    """
-    Health check endpoint.
-
-    Used by:
-    - Load balancers
-    - Monitoring systems
-    - CI/CD pipelines
-
-    Returns:
-        dict: Basic service health information
-    """
-    return {
-        "status": "ok",
-        "service": "automated-customer-support",
-    }
