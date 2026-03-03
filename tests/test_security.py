@@ -54,11 +54,12 @@ class TestPasswordHashing:
 
     def test_hash_is_bcrypt_format(self):
         """
-        bcrypt hashes start with '$2b$' (or '$2a$').
+        bcrypt hashes start with '$2b$', '$2a$', or '$2y$'.
         The prefix encodes the algorithm and cost factor.
         """
         hashed = hash_password("anypassword")
-        assert hashed.startswith("$2b$") or hashed.startswith("$2a$")
+        assert hashed.startswith("$2b$") or hashed.startswith("$2a$") or hashed.startswith("$2y$")
+        assert verify_password("anypassword", hashed) is True
 
     def test_hash_password_empty_string(self):
         """Should be able to hash an empty string without raising."""
