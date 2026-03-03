@@ -115,7 +115,7 @@ def create_app() -> FastAPI:
     # app.include_router(admin.router, prefix="/admin", tags=["Admin"])
     
     # Authentication endpoints
-    app.include_router(auth.router, tags=["Auth"])
+    app.include_router(auth.router)
     
     # Demo endpoints for viewing database data
     app.include_router(demo.router, tags=["Demo"])
