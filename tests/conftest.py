@@ -2,10 +2,11 @@
 pytest configuration and shared fixtures.
 
 Sets up test environment before any app imports.
-Uses in-memory SQLite for database tests to isolate from development data.
+Uses file-based SQLite for database tests to ensure table persistence.
 """
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 # Ensure this project's app is loaded (not a parent directory's)
@@ -13,7 +14,15 @@ _project_root = Path(__file__).resolve().parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-# Set test environment before any app modules are imported.
-# Uses in-memory SQLite so tests don't touch the development database.
-os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+# Create a temporary database file for tests
+temp_db = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
+temp_db.close()
+os.environ["DATABASE_URL"] = f"sqlite:///{temp_db.name}"
 os.environ["SECRET_KEY"] = "test-secret-key-for-pytest"
+
+# Clean up the temp database file after tests
+def pytest_sessionfinish(session, exitstatus):
+    try:
+        os.unlink(temp_db.name)
+    except:
+        pass
