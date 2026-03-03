@@ -24,7 +24,8 @@ DO NOT:
 Reference: Technical Spec § 5.4 (Schema Layer)
 """
 
-from pydantic import BaseModel, EmailStr
+import re
+from pydantic import BaseModel, EmailStr, ConfigDict, field_validator
 
 
 # -------------------------------------------------
@@ -67,9 +68,28 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
 
-    # TODO (Validation Enhancements):
-    # - minimum password length (e.g. 8 chars)
-    # - password complexity rules
+    @field_validator("password")
+    @classmethod
+    def password_complexity(cls, v: str) -> str:
+        """
+        Validate password complexity:
+        - Min 8 characters
+        - At least one uppercase letter
+        - At least one lowercase letter
+        - At least one digit
+        - At least one special character
+        """
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters long")
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not re.search(r"[a-z]", v):
+            raise ValueError("Password must contain at least one lowercase letter")
+        if not re.search(r"\d", v):
+            raise ValueError("Password must contain at least one digit")
+        if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", v):
+            raise ValueError("Password must contain at least one special character")
+        return v
 
 
 # -------------------------------------------------
@@ -96,9 +116,7 @@ class UserResponse(BaseModel):
     email: EmailStr
     role: str
 
-    class Config:
-        """Enables ORM mode so SQLAlchemy models can be serialised directly."""
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class Token(BaseModel):

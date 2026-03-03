@@ -22,7 +22,7 @@ DO NOT:
 - Change ticket status here
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 from datetime import datetime
 
@@ -80,8 +80,4 @@ class TicketResponse(BaseModel):
     status: str
     created_at: datetime
 
-    class Config:
-        """
-        Enables ORM compatibility.
-        """
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
