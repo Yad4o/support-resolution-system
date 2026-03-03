@@ -32,10 +32,12 @@ References:
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from datetime import timedelta
 from typing import Annotated
+from jose import JWTError
 
-from app.core.security import verify_password, create_access_token, hash_password
+from app.core.security import verify_password, create_access_token, hash_password, decode_token
 from app.core.config import settings
 from app.db.session import get_db
 from app.models.user import User
@@ -77,6 +79,9 @@ def create_user(db: Session, user_create: UserCreate) -> User:
         
     Returns:
         Created User object
+        
+    Raises:
+        HTTPException: If email already exists (400 Bad Request)
     """
     hashed_password = hash_password(user_create.password)
     db_user = User(
@@ -85,13 +90,22 @@ def create_user(db: Session, user_create: UserCreate) -> User:
         role="user"  # Default role for new registrations
     )
     db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
+    
+    try:
+        db.commit()
+        db.refresh(db_user)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+    
     return db_user
 
 
 @router.post("/login", response_model=Token)
-async def login(
+def login(
     user_credentials: UserLogin,
     db: Annotated[Session, Depends(get_db)]
 ):
@@ -130,7 +144,7 @@ async def login(
 
 
 @router.post("/register", response_model=UserResponse)
-async def register(
+def register(
     user_create: UserCreate,
     db: Annotated[Session, Depends(get_db)]
 ):
@@ -168,7 +182,7 @@ async def register(
     )
 
 
-async def get_current_user(
+def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],
     db: Annotated[Session, Depends(get_db)]
 ) -> User:
@@ -195,15 +209,21 @@ async def get_current_user(
     )
     
     try:
-        from app.core.security import decode_token
         payload = decode_token(token)
-        user_id: str = payload.get("sub")
-        if user_id is None:
+        user_id_str: str = payload.get("sub")
+        if user_id_str is None:
             raise credentials_exception
-    except Exception:
+        
+        # Validate and convert user_id to int
+        try:
+            user_id = int(user_id_str)
+        except (ValueError, TypeError):
+            raise credentials_exception
+            
+    except JWTError:
         raise credentials_exception
     
-    user = db.query(User).filter(User.id == int(user_id)).first()
+    user = db.query(User).filter(User.id == user_id).first()
     if user is None:
         raise credentials_exception
     
@@ -211,7 +231,7 @@ async def get_current_user(
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_current_user_info(
+def get_current_user_info(
     current_user: Annotated[User, Depends(get_current_user)]
 ):
     """
