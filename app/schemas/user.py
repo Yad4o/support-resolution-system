@@ -11,40 +11,26 @@ Om (Backend / API Contracts)
 
 Responsibilities:
 -----------------
-- Validate incoming user data
-- Shape API responses
-- Protect sensitive fields (e.g., passwords)
+- Validate incoming user data (login, registration)
+- Shape API responses (never expose hashed_password)
+- Define the Token response schema for JWT auth
 
 DO NOT:
 -------
 - Access database here
 - Hash passwords here
 - Implement authentication logic here
+
+Reference: Technical Spec § 5.4 (Schema Layer)
 """
 
-from pydantic import BaseModel, EmailStr
+import re
+from pydantic import BaseModel, EmailStr, ConfigDict, field_validator
 
 
-class UserCreate(BaseModel):
-    """
-    Schema used when creating a new user.
-
-    Used in:
-    --------
-    POST /auth/register
-
-    Fields:
-    -------
-    - email: User email (validated)
-    - password: Plain password (will be hashed later)
-    """
-
-    email: EmailStr
-    password: str
-
-    # TODO (Validation Enhancements):
-    # - minimum password length
-    # - password complexity rules
+# -------------------------------------------------
+# Request Schemas
+# -------------------------------------------------
 
 
 class UserLogin(BaseModel):
@@ -54,28 +40,103 @@ class UserLogin(BaseModel):
     Used in:
     --------
     POST /auth/login
+
+    Fields:
+    -------
+    - email: User email address (validated as EmailStr)
+    - password: Plain-text password (never stored — passed to verify_password)
     """
 
     email: EmailStr
     password: str
 
 
+class UserCreate(BaseModel):
+    """
+    Schema used when registering a new user.
+
+    Used in:
+    --------
+    POST /auth/register
+
+    Fields:
+    -------
+    - email: User email (validated as EmailStr)
+    - password: Plain-text password (will be hashed by auth API before storage)
+    """
+
+    email: EmailStr
+    password: str
+
+    @field_validator("password")
+    @classmethod
+    def password_complexity(cls, v: str) -> str:
+        """
+        Validate password complexity:
+        - Min 8 characters
+        - At least one uppercase letter
+        - At least one lowercase letter
+        - At least one digit
+        - At least one special character
+        """
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters long")
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not re.search(r"[a-z]", v):
+            raise ValueError("Password must contain at least one lowercase letter")
+        if not re.search(r"\d", v):
+            raise ValueError("Password must contain at least one digit")
+        if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", v):
+            raise ValueError("Password must contain at least one special character")
+        return v
+
+
+# -------------------------------------------------
+# Response Schemas
+# -------------------------------------------------
+
+
 class UserResponse(BaseModel):
     """
-    Schema used when returning user information to clients.
+    Schema returned when user information is sent to clients.
 
     IMPORTANT:
     ----------
-    Never include sensitive fields like:
+    Never include sensitive fields such as:
     - hashed_password
+
+    Used in:
+    --------
+    POST /auth/register (response)
+    GET  /users/me (future)
     """
 
     id: int
     email: EmailStr
     role: str
 
-    class Config:
-        """
-        Enables ORM compatibility.
-        """
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
+
+
+class Token(BaseModel):
+    """
+    Schema returned after a successful login.
+
+    Contains a signed JWT access token that the client must send
+    in the Authorization header as ``Bearer <token>`` for protected routes.
+
+    Used in:
+    --------
+    POST /auth/login (response)
+
+    Fields:
+    -------
+    - access_token: The signed JWT string
+    - token_type:   Always "bearer" (OAuth 2.0 convention)
+
+    Reference: Technical Spec § 10.1 (Authentication)
+    """
+
+    access_token: str
+    token_type: str = "bearer"

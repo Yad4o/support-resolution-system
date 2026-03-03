@@ -22,7 +22,7 @@ DO NOT:
 - Modify AI confidence thresholds here
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 
 
@@ -62,8 +62,4 @@ class FeedbackResponse(BaseModel):
     resolved: bool
     created_at: datetime
 
-    class Config:
-        """
-        Enables ORM compatibility.
-        """
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
