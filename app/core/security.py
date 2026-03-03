@@ -39,7 +39,7 @@ from app.core.config import settings
 # Password Hashing
 # -------------------------------------------------
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", truncate_error=True)
 """
 Passlib CryptContext configured for bcrypt.
 Using 'deprecated="auto"' ensures old hashes are automatically
@@ -81,7 +81,10 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
     Reference: Technical Spec § 10.2 (Password Handling)
     """
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception:
+        return False
 
 
 # -------------------------------------------------
