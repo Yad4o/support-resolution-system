@@ -76,7 +76,7 @@ class TestAuthEndpoints:
         )
 
         assert response.status_code == 400
-        assert "Email already registered" in response.json()["detail"]
+        assert "Registration failed" in response.json()["detail"]
 
     def test_register_weak_password(self, test_client):
         """Test registration with weak password fails validation."""

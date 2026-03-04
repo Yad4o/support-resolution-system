@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     ALGORITHM: str = "HS256"
     CORS_ORIGINS: list[str] = []
+    DEFAULT_USER_ROLE: str = "user"
 
     # -------------------------------------------------
     # Database

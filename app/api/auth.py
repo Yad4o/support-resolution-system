@@ -32,10 +32,11 @@ References:
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from datetime import timedelta
 from typing import Annotated
 from jose import JWTError
+import logging
 
 from app.core.security import verify_password, create_access_token, hash_password, decode_token
 from app.core.config import settings
@@ -47,6 +48,8 @@ from app.schemas.user import UserLogin, UserCreate, UserResponse, Token
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+logger = logging.getLogger(__name__)
 
 
 def authenticate_user(db: Session, email: str, password: str) -> User | None:
@@ -61,12 +64,16 @@ def authenticate_user(db: Session, email: str, password: str) -> User | None:
     Returns:
         User object if authentication successful, None otherwise
     """
-    user = db.query(User).filter(User.email == email).first()
-    if not user:
+    try:
+        user = db.query(User).filter(User.email.ilike(email)).first()
+        if not user:
+            return None
+        if not verify_password(password, user.hashed_password):
+            return None
+        return user
+    except SQLAlchemyError as e:
+        logger.error(f"Database error during authentication: {e}")
         return None
-    if not verify_password(password, user.hashed_password):
-        return None
-    return user
 
 
 def create_user(db: Session, user_create: UserCreate) -> User:
@@ -81,27 +88,33 @@ def create_user(db: Session, user_create: UserCreate) -> User:
         Created User object
         
     Raises:
-        HTTPException: If email already exists (400 Bad Request)
+        HTTPException: If email already exists (400 Bad Request) or database error occurs
     """
-    hashed_password = hash_password(user_create.password)
-    db_user = User(
-        email=user_create.email,
-        hashed_password=hashed_password,
-        role="user"  # Default role for new registrations
-    )
-    db.add(db_user)
-    
     try:
+        hashed_password = hash_password(user_create.password)
+        default_role = getattr(settings, 'DEFAULT_USER_ROLE', 'user')
+        db_user = User(
+            email=user_create.email,
+            hashed_password=hashed_password,
+            role=default_role
+        )
+        db.add(db_user)
         db.commit()
         db.refresh(db_user)
+        return db_user
     except IntegrityError:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
+            detail="Registration failed. Email may already be registered."
         )
-    
-    return db_user
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"Database error creating user: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error during registration"
+        )
 
 
 @router.post("/login", response_model=Token)
@@ -151,7 +164,7 @@ def register(
     """
     Register a new user and return user information.
     
-    This is an optional endpoint that creates a new user with hashed password.
+    This endpoint creates a new user with hashed password.
     The password is validated by the UserCreate schema before reaching here.
     
     Args:
@@ -162,17 +175,9 @@ def register(
         UserResponse schema with user information (no password)
         
     Raises:
-        HTTPException: If user already exists (400 Bad Request)
+        HTTPException: If registration fails (400 Bad Request or 500 Internal Server Error)
     """
-    # Check if user already exists
-    existing_user = db.query(User).filter(User.email == user_create.email).first()
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
-        )
-    
-    # Create new user
+    # Create new user - database constraints will handle duplicates
     user = create_user(db, user_create)
     
     return UserResponse(
@@ -223,11 +228,14 @@ def get_current_user(
     except JWTError:
         raise credentials_exception
     
-    user = db.query(User).filter(User.id == user_id).first()
-    if user is None:
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if user is None:
+            raise credentials_exception
+        return user
+    except SQLAlchemyError as e:
+        logger.error(f"Database error retrieving user: {e}")
         raise credentials_exception
-    
-    return user
 
 
 @router.get("/me", response_model=UserResponse)
