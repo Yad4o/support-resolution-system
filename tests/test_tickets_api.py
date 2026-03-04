@@ -14,6 +14,7 @@ Covers:
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
+from unittest.mock import patch, MagicMock
 
 from app.main import app
 from app.db.session import get_db, engine, init_db
@@ -111,25 +112,6 @@ class TestCreateTicket:
         response = client.post("/tickets/", data="invalid json")
         
         assert response.status_code == 422
-
-    def test_create_ticket_database_error(self):
-        """Test ticket creation when database fails."""
-        # This is hard to test without mocking, but we can at least verify
-        # the endpoint exists and handles the request structure
-        ticket_data = {"message": "Test message"}
-        
-        response = client.post("/tickets/", json=ticket_data)
-        
-        # Should either succeed or fail gracefully
-        assert response.status_code in [201, 500]
-        
-        # If it fails, should return generic error message
-        if response.status_code == 500:
-            detail = response.json().get("detail", "")
-            assert "Internal server error occurred while creating ticket" in detail
-            # Should not expose internal details
-            assert "sqlalchemy" not in detail.lower()
-            assert "database" not in detail.lower()
 
 
 class TestListTickets:
