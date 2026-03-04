@@ -95,9 +95,10 @@ def create_ticket(
 
 @router.get("/", response_model=TicketList)
 def list_tickets(
-    status: Optional[str] = Query(
+    ticket_status: Optional[str] = Query(
         None,
-        description="Filter tickets by status (open, auto_resolved, escalated, closed)"
+        description="Filter tickets by status (open, auto_resolved, escalated, closed)",
+        alias="status"
     ),
     db: Session = Depends(get_db),
 ) -> TicketList:
@@ -105,7 +106,7 @@ def list_tickets(
     List all tickets with optional status filtering.
     
     Args:
-        status: Optional status filter
+        ticket_status: Optional status filter
         db: Database session dependency
         
     Returns:
@@ -119,8 +120,8 @@ def list_tickets(
         query = db.query(Ticket)
         
         # Apply status filter if provided
-        if status:
-            query = query.filter(Ticket.status == status)
+        if ticket_status:
+            query = query.filter(Ticket.status == ticket_status)
         
         # Execute query (order by creation date, newest first)
         tickets = query.order_by(Ticket.created_at.desc()).all()
