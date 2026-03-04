@@ -29,7 +29,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import field_validator
 
 # Define allowed roles for security
-ALLOWED_ROLES = {"user", "admin", "moderator"}
+ALLOWED_ROLES = {"user", "agent", "admin"}
 
 class Settings(BaseSettings):
     """

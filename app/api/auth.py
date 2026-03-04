@@ -63,6 +63,9 @@ def authenticate_user(db: Session, email: str, password: str) -> User | None:
         
     Returns:
         User object if authentication successful, None otherwise
+        
+    Raises:
+        HTTPException: If database error occurs (500 Internal Server Error)
     """
     try:
         # Normalize email to lowercase for consistent storage and lookup
@@ -75,7 +78,10 @@ def authenticate_user(db: Session, email: str, password: str) -> User | None:
         return user
     except SQLAlchemyError as e:
         logger.error(f"Database error during authentication: {e}")
-        return None
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Authentication service temporarily unavailable"
+        )
 
 
 def create_user(db: Session, user_create: UserCreate) -> User:
@@ -241,7 +247,10 @@ def get_current_user(
         return user
     except SQLAlchemyError as e:
         logger.error(f"Database error retrieving user: {e}")
-        raise credentials_exception
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Authentication service temporarily unavailable"
+        )
 
 
 @router.get("/me", response_model=UserResponse)
