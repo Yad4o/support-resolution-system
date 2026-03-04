@@ -132,6 +132,26 @@ def list_tickets(
         )
 
 
+@router.get("/health", response_model=dict)
+def tickets_health():
+    """
+    Health check endpoint for tickets API.
+    
+    Returns:
+        dict: Health status of tickets service
+    """
+    return {
+        "status": "healthy",
+        "service": "tickets-api",
+        "version": "0.1.0",
+        "endpoints": [
+            "POST /tickets/",
+            "GET /tickets/",
+            "GET /tickets/{id}"
+        ]
+    }
+
+
 @router.get("/{ticket_id}", response_model=TicketResponse)
 def get_ticket(
     ticket_id: int,

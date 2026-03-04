@@ -399,3 +399,21 @@ class TestTicketAPIIntegration:
         # Verify all are actually open
         for ticket in open_tickets:
             assert ticket["status"] == "open"
+
+
+class TestTicketsHealth:
+    """Test cases for GET /tickets/health endpoint."""
+
+    def test_tickets_health_check(self):
+        """Test tickets API health check endpoint."""
+        response = client.get("/tickets/health")
+        
+        assert response.status_code == 200
+        data = response.json()
+        
+        assert data["status"] == "healthy"
+        assert data["service"] == "tickets-api"
+        assert "version" in data
+        assert "endpoints" in data
+        assert isinstance(data["endpoints"], list)
+        assert len(data["endpoints"]) == 3
