@@ -86,7 +86,7 @@ def create_ticket(
         
     except Exception as e:
         db.rollback()
-        logger.error(f"Failed to create ticket: {str(e)}", exc_info=True)
+        logger.exception("Failed to create ticket")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error occurred while creating ticket"
@@ -132,7 +132,7 @@ def list_tickets(
         return TicketList(tickets=ticket_responses)
         
     except Exception as e:
-        logger.error(f"Failed to retrieve tickets: {str(e)}", exc_info=True)
+        logger.exception("Failed to retrieve tickets")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error occurred while retrieving tickets"
@@ -193,7 +193,7 @@ def get_ticket(
         # Re-raise HTTP exceptions (like 404)
         raise
     except Exception as e:
-        logger.error(f"Failed to retrieve ticket {ticket_id}: {str(e)}", exc_info=True)
+        logger.exception(f"Failed to retrieve ticket {ticket_id}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error occurred while retrieving ticket"
