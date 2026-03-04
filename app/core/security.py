@@ -64,12 +64,18 @@ def hash_password(plain_password: str) -> str:
     Reference: Technical Spec § 10.2 (Password Handling)
     """
     # bcrypt has a 72-byte limit for passwords
-    # Use byte-based slicing to handle multibyte UTF-8 characters correctly
-    password_bytes = plain_password.encode('utf-8')
-    if len(password_bytes) > 72:
-        # Take first 72 bytes and decode, ignoring incomplete trailing sequences
-        password_bytes = password_bytes[:72]
-        plain_password = password_bytes.decode('utf-8', errors='ignore')
+    # Truncate at character level to avoid splitting UTF-8 multibyte characters
+    if len(plain_password.encode('utf-8')) > 72:
+        # Find the character position that keeps us within 72 bytes
+        truncated_password = ""
+        byte_count = 0
+        for char in plain_password:
+            char_bytes = char.encode('utf-8')
+            if byte_count + len(char_bytes) > 72:
+                break
+            truncated_password += char
+            byte_count += len(char_bytes)
+        plain_password = truncated_password
     return pwd_context.hash(plain_password)
 
 
@@ -90,12 +96,18 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
     try:
         # bcrypt has a 72-byte limit for passwords
-        # Use byte-based slicing to handle multibyte UTF-8 characters correctly
-        password_bytes = plain_password.encode('utf-8')
-        if len(password_bytes) > 72:
-            # Take first 72 bytes and decode, ignoring incomplete trailing sequences
-            password_bytes = password_bytes[:72]
-            plain_password = password_bytes.decode('utf-8', errors='ignore')
+        # Truncate at character level to avoid splitting UTF-8 multibyte characters
+        if len(plain_password.encode('utf-8')) > 72:
+            # Find the character position that keeps us within 72 bytes
+            truncated_password = ""
+            byte_count = 0
+            for char in plain_password:
+                char_bytes = char.encode('utf-8')
+                if byte_count + len(char_bytes) > 72:
+                    break
+                truncated_password += char
+                byte_count += len(char_bytes)
+            plain_password = truncated_password
         return pwd_context.verify(plain_password, hashed_password)
     except Exception:
         return False

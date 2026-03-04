@@ -76,7 +76,7 @@ class TestAuthEndpoints:
         )
 
         assert response.status_code == 400
-        assert "Registration failed" in response.json()["detail"]
+        assert "Authentication service temporarily unavailable" in response.json()["detail"]
 
     def test_register_weak_password(self, test_client):
         """Test registration with weak password fails validation."""
@@ -274,8 +274,8 @@ class TestTokenValidation:
             assert response.status_code == 200
             assert "access_token" in response.json()
 
-    def test_login_case_sensitive_email(self, test_client):
-        """Test that email login works with consistent email case."""
+    def test_login_case_insensitive_email(self, test_client):
+        """Test that email login works with case-insensitive email matching."""
         email = "CaseSensitive@Test.COM"
         password = "Password123!"
 
@@ -285,10 +285,22 @@ class TestTokenValidation:
             json={"email": email, "password": password}
         )
         assert response.status_code == 200
+        # Email should be stored in lowercase
+        registered_email = response.json()["email"]
+        assert registered_email == email.lower()
 
-        # Login should work with the same email (case preserved)
-        response = test_client.post(
-            "/auth/login",
-            json={"email": email, "password": password}
-        )
-        assert response.status_code == 200
+        # Login should work with any case variation due to normalization
+        test_cases = [
+            email,                    # Original case
+            email.lower(),            # All lowercase
+            email.upper(),            # All uppercase
+            "CaseSensitive@test.com" # Mixed case
+        ]
+        
+        for login_email in test_cases:
+            response = test_client.post(
+                "/auth/login",
+                json={"email": login_email, "password": password}
+            )
+            assert response.status_code == 200
+            assert "access_token" in response.json()

@@ -49,7 +49,16 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
+# Configure logger with proper formatting
 logger = logging.getLogger(__name__)
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO))
 
 
 def authenticate_user(db: Session, email: str, password: str) -> User | None:
@@ -67,9 +76,16 @@ def authenticate_user(db: Session, email: str, password: str) -> User | None:
     Raises:
         HTTPException: If database error occurs (500 Internal Server Error)
     """
+    # Validate inputs
+    if not email or not password:
+        return None
+        
     try:
         # Normalize email to lowercase for consistent storage and lookup
         normalized_email = email.strip().lower()
+        if not normalized_email:  # Check if email is empty after stripping
+            return None
+            
         user = db.query(User).filter(User.email == normalized_email).first()
         if not user:
             return None
@@ -98,12 +114,24 @@ def create_user(db: Session, user_create: UserCreate) -> User:
     Raises:
         HTTPException: If email already exists (400 Bad Request) or database error occurs
     """
+    # Validate inputs
+    if not user_create.email or not user_create.password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email and password are required"
+        )
+        
     try:
         hashed_password = hash_password(user_create.password)
         default_role = getattr(settings, 'DEFAULT_USER_ROLE', 'user')
         
         # Normalize email to lowercase for consistent storage and uniqueness
         normalized_email = user_create.email.strip().lower()
+        if not normalized_email:  # Check if email is empty after stripping
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email cannot be empty"
+            )
         
         db_user = User(
             email=normalized_email,
@@ -118,14 +146,14 @@ def create_user(db: Session, user_create: UserCreate) -> User:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Registration failed. Email may already be registered."
+            detail="Authentication service temporarily unavailable"
         )
     except SQLAlchemyError as e:
         db.rollback()
         logger.error(f"Database error creating user: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error during registration"
+            detail="Authentication service temporarily unavailable"
         )
 
 
