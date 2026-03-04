@@ -29,7 +29,8 @@ References:
 - Task 2.2 (User Schemas)
 """
 
-import re
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
@@ -37,9 +38,8 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from datetime import timedelta
 from typing import Annotated
 from jose import JWTError
-import logging
 
-from app.core.security import verify_password, create_access_token, hash_password, decode_token
+from app.core.security import verify_password, create_access_token, hash_password, decode_token, check_password_truncation
 from app.core.config import settings, ALLOWED_ROLES
 from app.db.session import get_db
 from app.models.user import User
@@ -54,22 +54,27 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 logger = logging.getLogger(__name__)
 
 
-def is_valid_email(email: str) -> bool:
+def normalize_email(email: str) -> str:
     """
-    Validate email format using regex.
+    Normalize email address for consistent storage and lookup.
     
     Args:
-        email: Email string to validate
+        email: Email string to normalize
         
     Returns:
-        True if email format is valid, False otherwise
+        Normalized email (lowercase and stripped)
+        
+    Raises:
+        ValueError: If email is empty or only whitespace
     """
     if not email:
-        return False
+        raise ValueError("Email cannot be empty")
     
-    # Basic email regex pattern - covers most common cases
-    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    return re.match(pattern, email) is not None
+    normalized = email.strip().lower()
+    if not normalized:
+        raise ValueError("Email cannot be empty")
+    
+    return normalized
 
 
 def authenticate_user(db: Session, email: str, password: str) -> User | None:
@@ -90,16 +95,10 @@ def authenticate_user(db: Session, email: str, password: str) -> User | None:
     # Validate inputs
     if not email or not password:
         return None
-    
-    # Validate email format
-    if not is_valid_email(email):
-        return None
         
     try:
         # Normalize email to lowercase for consistent storage and lookup
-        normalized_email = email.strip().lower()
-        if not normalized_email:  # Check if email is empty after stripping
-            return None
+        normalized_email = normalize_email(email)
             
         user = db.query(User).filter(User.email == normalized_email).first()
         if not user:
@@ -135,15 +134,16 @@ def create_user(db: Session, user_create: UserCreate) -> User:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email and password are required"
         )
-    
-    # Validate email format
-    if not is_valid_email(user_create.email):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid email format"
-        )
         
     try:
+        # Check if password would be truncated and warn user
+        truncation_info = check_password_truncation(user_create.password)
+        if truncation_info["would_be_truncated"]:
+            logger.info(
+                f"User registration with long password ({truncation_info['original_bytes']} bytes). "
+                f"Password will be truncated to {truncation_info['max_bytes']} bytes."
+            )
+        
         hashed_password = hash_password(user_create.password)
         default_role = getattr(settings, 'DEFAULT_USER_ROLE', 'user')
         
@@ -156,12 +156,7 @@ def create_user(db: Session, user_create: UserCreate) -> User:
             )
         
         # Normalize email to lowercase for consistent storage and uniqueness
-        normalized_email = user_create.email.strip().lower()
-        if not normalized_email:  # Check if email is empty after stripping
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email cannot be empty"
-            )
+        normalized_email = normalize_email(user_create.email)
         
         db_user = User(
             email=normalized_email,
@@ -176,7 +171,7 @@ def create_user(db: Session, user_create: UserCreate) -> User:
         db.rollback()
         # Check if this is a duplicate email error
         if "email" in str(e).lower() or "unique" in str(e).lower():
-            logger.warning(f"Duplicate email registration attempt: {user_create.email}")
+            logger.warning("Duplicate email registration attempt detected")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email already registered"
@@ -184,7 +179,7 @@ def create_user(db: Session, user_create: UserCreate) -> User:
         else:
             logger.error(f"Database integrity error creating user: {e}")
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Authentication service temporarily unavailable"
             )
     except SQLAlchemyError as e:
@@ -222,10 +217,10 @@ def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Create access token with user info
+    # Create access token with user info (removed email for security)
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": str(user.id), "email": user.email, "role": user.role},
+        data={"sub": str(user.id), "role": user.role},
         expires_delta=access_token_expires
     )
     

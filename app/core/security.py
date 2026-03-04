@@ -47,6 +47,26 @@ flagged as needing re-hashing (forward-compatible).
 """
 
 
+def check_password_truncation(plain_password: str) -> dict:
+    """
+    Check if a password would be truncated by bcrypt.
+    
+    Args:
+        plain_password: The raw password to check
+        
+    Returns:
+        dict: Information about potential truncation
+    """
+    original_bytes = len(plain_password.encode('utf-8'))
+    would_be_truncated = original_bytes > 72
+    
+    return {
+        "would_be_truncated": would_be_truncated,
+        "original_bytes": original_bytes,
+        "max_bytes": 72
+    }
+
+
 def _truncate_password_for_bcrypt(plain_password: str) -> str:
     """
     Truncate password to fit bcrypt's 72-byte limit without splitting UTF-8 characters.
@@ -58,8 +78,13 @@ def _truncate_password_for_bcrypt(plain_password: str) -> str:
         Password truncated to maximum 72 bytes
     """
     # bcrypt has a 72-byte limit for passwords
-    # Truncate at character level to avoid splitting UTF-8 multibyte characters
-    if len(plain_password.encode('utf-8')) > 72:
+    original_length = len(plain_password)
+    original_bytes = len(plain_password.encode('utf-8'))
+    
+    if original_bytes > 72:
+        import logging
+        logger = logging.getLogger(__name__)
+        
         # Find the character position that keeps us within 72 bytes
         truncated_password = ""
         byte_count = 0
@@ -69,7 +94,15 @@ def _truncate_password_for_bcrypt(plain_password: str) -> str:
                 break
             truncated_password += char
             byte_count += len(char_bytes)
-        plain_password = truncated_password
+        
+        # Log the truncation for security monitoring
+        logger.warning(
+            f"Password truncated from {original_length} characters ({original_bytes} bytes) "
+            f"to {len(truncated_password)} characters ({byte_count} bytes) to fit bcrypt limit"
+        )
+        
+        return truncated_password
+    
     return plain_password
 
 

@@ -100,6 +100,36 @@ class TestAuthEndpoints:
         # Should be stored in lowercase
         assert response.json()["email"] == email_uppercase.lower()
 
+    def test_register_whitespace_only_email(self, test_client):
+        """Test registration with whitespace-only email fails."""
+        response = test_client.post(
+            "/auth/register",
+            json={"email": "   ", "password": "Password123!"}
+        )
+        # Should fail at EmailStr validation level
+        assert response.status_code == 422
+
+    def test_register_leading_trailing_whitespace_email(self, test_client):
+        """Test registration with leading/trailing whitespace in email."""
+        email_with_spaces = f"  test{unique_email().split('@')[0]}@example.com  "
+        expected_email = email_with_spaces.strip().lower()
+        response = test_client.post(
+            "/auth/register",
+            json={"email": email_with_spaces, "password": "Password123!"}
+        )
+        assert response.status_code == 200
+        # Should be stored without whitespace and in lowercase
+        assert response.json()["email"] == expected_email
+
+    def test_register_whitespace_only_password(self, test_client):
+        """Test registration with whitespace-only password fails."""
+        response = test_client.post(
+            "/auth/register",
+            json={"email": "test@example.com", "password": "   "}
+        )
+        # Should fail at schema validation level
+        assert response.status_code == 422
+
     def test_register_existing_email_improved_message(self, test_client):
         """Test registration with existing email returns specific message."""
         email = unique_email()
@@ -169,6 +199,47 @@ class TestAuthEndpoints:
         )
         assert login_response.status_code == 200
 
+    def test_password_truncation_info(self, test_client):
+        """Test password truncation checking functionality."""
+        from app.core.security import check_password_truncation
+        
+        # Test short password (no truncation)
+        short_password = "Password123!"
+        info = check_password_truncation(short_password)
+        assert not info["would_be_truncated"]
+        assert info["original_bytes"] < 72
+        assert info["max_bytes"] == 72
+        
+        # Test long password (would be truncated)
+        long_password = "a" * 100  # 100 characters
+        info = check_password_truncation(long_password)
+        assert info["would_be_truncated"]
+        assert info["original_bytes"] > 72
+        assert info["max_bytes"] == 72
+
+    def test_jwt_token_no_email_payload(self, test_client):
+        """Test that JWT token no longer contains email in payload."""
+        email = unique_email()
+        # Register and login to get token
+        test_client.post(
+            "/auth/register",
+            json={"email": email, "password": "Password123!"}
+        )
+        login_response = test_client.post(
+            "/auth/login",
+            json={"email": email, "password": "Password123!"}
+        )
+        token = login_response.json()["access_token"]
+        
+        # Decode token and check payload
+        payload = decode_token(token)
+        
+        # Should contain sub and role but NOT email
+        assert "sub" in payload
+        assert "role" in payload
+        assert "email" not in payload
+        assert payload["role"] == "user"
+
     def test_login_success(self, test_client):
         """Test successful login returns valid JWT token."""
         email = unique_email()
@@ -195,7 +266,7 @@ class TestAuthEndpoints:
         payload = decode_token(token)
         assert "sub" in payload
         assert "exp" in payload
-        assert payload["email"] == email
+        assert "email" not in payload  # Email should not be in token for security
         assert payload["role"] == "user"
 
     def test_login_invalid_email(self, test_client):
@@ -272,14 +343,15 @@ class TestTokenValidation:
 
     def test_token_contains_required_claims(self):
         """Test JWT token contains required claims."""
-        token = create_access_token({"sub": "123", "email": "test@example.com", "role": "user"})
+        token = create_access_token({"sub": "123", "role": "user"})
         payload = decode_token(token)
 
         assert "sub" in payload
         assert "exp" in payload
         assert payload["sub"] == "123"
-        assert payload["email"] == "test@example.com"
+        assert "role" in payload
         assert payload["role"] == "user"
+        assert "email" not in payload  # Email should not be in token
 
     def test_token_expires_correctly(self):
         """Test JWT token expires correctly."""
