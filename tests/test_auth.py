@@ -162,7 +162,7 @@ class TestAuthEndpoints:
         """Test registration with very long password (over 72 bytes)."""
         # Create a password that exceeds 72 bytes when UTF-8 encoded
         # but still meets complexity requirements
-        long_password = "a" * 50 + "A" * 20 + "1!"  # 72+ characters with complexity
+        long_password = "a" * 51 + "A" * 20 + "1!"  # 73 bytes (ASCII), exercises truncation path
         email = unique_email()
         
         response = test_client.post(
