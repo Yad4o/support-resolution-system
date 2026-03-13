@@ -39,7 +39,9 @@ class IntentClassifier:
             "patterns": [
                 r"(?:can't|cannot|unable to).*(?:login|sign in|log in)",
                 r"(?:forgot|reset).*(?:password|credential)",
-                r"(?:account|access).*(?:locked|disabled|suspended)"
+                r"(?:account|access).*(?:locked|disabled|suspended)",
+                r"(?:invalid|incorrect).*(?:credentials|password|login)",
+                r"(?:login|sign in).*(?:failed|error|issues)"
             ],
             "base_confidence": 0.9
         },
@@ -76,9 +78,12 @@ class IntentClassifier:
                 "down", "unavailable", "timeout", "loading", "freeze"
             ],
             "patterns": [
-                r"(?:error|bug|issue).*(?:occur|happen|appear)",
-                r"(?:system|server|app).*(?:down|unavailable|crashed)",
-                r"(?:slow|performance|loading).*(?:issue|problem)"
+                r"(?:error|bug|issue).*(?:occur|happen|appear|getting|message)",
+                r"(?:system|server|app|website).*(?:down|unavailable|crashed|crashing)",
+                r"(?:slow|performance|loading).*(?:issue|problem)",
+                r"(?:crashing|keeps crashing|crashed).*(?:when|when I|when trying)",
+                r"(?:very slow|slow performance|too slow)",
+                r"(?:getting|receiving|seeing).*(?:error|bug|issue)"
             ],
             "base_confidence": 0.7
         },
@@ -104,7 +109,8 @@ class IntentClassifier:
             "patterns": [
                 r"(?:how|what|where|when|why).*(?:do|can|should|would)",
                 r"(?:question|help|support).*(?:need|require)",
-                r"(?:explain|understand|clarify).*(?:please|kindly)"
+                r"(?:explain|understand|clarify).*(?:please|kindly)",
+                r"(?:what are|what is|where can|how do).*(?:your|the|to)"
             ],
             "base_confidence": 0.6
         }
@@ -151,24 +157,33 @@ class IntentClassifier:
         intent_scores = []
         
         for intent, config in self.INTENT_PATTERNS.items():
-            score = self._calculate_intent_score(normalized_message, intent, config)
-            if score > 0:
-                intent_scores.append((intent, score))
+            score_data = self._calculate_intent_score(normalized_message, intent, config)
+            if score_data["total_matches"] > 0:
+                intent_scores.append((intent, score_data))
         
-        # Sort by score (highest first)
-        intent_scores.sort(key=lambda x: x[1], reverse=True)
+        # Sort by comprehensive ranking:
+        # 1. Number of pattern matches (strongest signal)
+        # 2. Total score with specificity weighting
+        # 3. Base confidence (tie-breaker)
+        intent_scores.sort(key=lambda x: (
+            x[1]["pattern_matches"],           # Primary: pattern matches
+            x[1]["score"],                     # Secondary: weighted score
+            x[1]["multi_word_matches"],        # Tertiary: specificity
+            self.INTENT_PATTERNS[x[0]]["base_confidence"]  # Final: base confidence
+        ), reverse=True)
         
         if not intent_scores:
             return {"intent": "unknown", "confidence": 0.0}
         
         # Get the best match
-        best_intent, best_score = intent_scores[0]
+        best_intent, best_score_data = intent_scores[0]
+        raw_confidence = best_score_data["score"]
         
-        # Apply confidence normalization and validation
-        normalized_confidence = self._normalize_confidence(best_score, len(normalized_message))
+        # Apply confidence normalization (removed 0.4 floor)
+        normalized_confidence = self._normalize_confidence(raw_confidence, len(normalized_message))
         
         # If confidence is too low, classify as unknown
-        if normalized_confidence < 0.2:
+        if normalized_confidence < 0.15:
             return {"intent": "unknown", "confidence": normalized_confidence}
         
         return {
@@ -176,50 +191,70 @@ class IntentClassifier:
             "confidence": min(normalized_confidence, 1.0)  # Ensure max 1.0
         }
     
-    def _calculate_intent_score(self, message: str, intent: str, config: Dict) -> float:
+    def _calculate_intent_score(self, message: str, intent: str, config: Dict) -> Dict:
         """Calculate intent score based on keyword and pattern matching."""
-        score = 0.0
+        import re
         
-        # Keyword matching (higher weight)
-        keyword_matches = 0
-        message_lower = message.lower()
-        for keyword in config["keywords"]:
-            if keyword.lower() in message_lower:
-                keyword_matches += 1
-                # Bonus for exact phrase matches
-                if len(keyword.split()) > 1:
-                    score += 0.5
-                else:
-                    score += 0.3
+        # Tokenize message for word boundary matching
+        tokens = re.findall(r'\b\w+\b', message.lower())
+        token_set = set(tokens)
         
-        # Pattern matching (highest weight)
+        # Pattern matching (strongest signal)
         pattern_matches = 0
         for pattern in self._compiled_patterns[intent]:
             if pattern.search(message):
                 pattern_matches += 1
-                score += 0.6
+        
+        # Keyword matching with word boundaries
+        keyword_matches = 0
+        multi_word_matches = 0
+        single_word_matches = 0
+        
+        for keyword in config["keywords"]:
+            keyword_lower = keyword.lower()
+            
+            if len(keyword.split()) > 1:
+                # Multi-word keywords: use substring matching
+                if keyword_lower in message.lower():
+                    multi_word_matches += 1
+                    keyword_matches += 1
+            else:
+                # Single-word keywords: use exact token matching
+                if keyword_lower in token_set:
+                    single_word_matches += 1
+                    keyword_matches += 1
+        
+        # Calculate base score with specificity weighting
+        base_score = 0.0
+        
+        # Pattern matches are the strongest signal (highest weight)
+        base_score += pattern_matches * 1.0
+        
+        # Multi-word keywords are stronger than single-word
+        base_score += multi_word_matches * 0.6
+        
+        # Single-word keywords (word-boundary matched)
+        base_score += single_word_matches * 0.3
         
         # Apply base confidence multiplier
         if keyword_matches > 0 or pattern_matches > 0:
-            score *= config["base_confidence"]
+            base_score *= config["base_confidence"]
         
         # Bonus for multiple matches
         if keyword_matches + pattern_matches > 1:
-            score *= 1.3  # 30% bonus for multiple indicators
+            base_score *= 1.2  # 20% bonus for multiple indicators
         
-        # Minimum score for any match
-        if score > 0:
-            score = max(score, 0.4)  # Ensure minimum confidence for matches
-        
-        return score
+        return {
+            "score": base_score,
+            "pattern_matches": pattern_matches,
+            "multi_word_matches": multi_word_matches,
+            "single_word_matches": single_word_matches,
+            "total_matches": keyword_matches + pattern_matches
+        }
     
     def _normalize_confidence(self, raw_score: float, message_length: int) -> float:
         """Normalize confidence score based on message characteristics."""
-        # Don't reduce confidence too much for matched intents
-        if raw_score >= 0.4:  # This was a minimum score for a match
-            return raw_score
-        
-        # Adjust confidence based on message length for lower scores
+        # Adjust confidence based on message length
         if message_length < 10:
             # Very short messages get slight reduction
             return raw_score * 0.8
