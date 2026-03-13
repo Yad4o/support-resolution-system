@@ -1,9 +1,9 @@
 import warnings
-from typing import Dict
-from .intent_classifier import classify_intent as new_classify_intent
+from typing import Dict, Union
+from .intent_classifier import classify_intent as new_classify_intent, IntentResult
 
 
-def classify_intent(text: str) -> Dict[str, float]:
+def classify_intent(text: str) -> IntentResult:
     """
     Classify user intent using rule-based keyword matching.
     

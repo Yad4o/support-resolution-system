@@ -9,12 +9,10 @@ Reference: Technical Spec § 9.1 (Intent Classification)
 """
 
 import re
-from typing import Dict, List, Tuple
-from dataclasses import dataclass
+from typing import Dict, TypedDict, Union, List
 
 
-@dataclass
-class IntentResult:
+class IntentResult(TypedDict):
     """Result of intent classification."""
     intent: str
     confidence: float
@@ -127,7 +125,7 @@ class IntentClassifier:
                 for pattern in config["patterns"]
             ]
     
-    def classify_intent(self, message: str) -> Dict[str, float]:
+    def classify_intent(self, message: str) -> IntentResult:
         """
         Classify the intent of a ticket message.
         
@@ -150,6 +148,10 @@ class IntentClassifier:
         
         # Normalize message
         normalized_message = message.lower().strip()
+        # Replace common separators with spaces for better phrase matching
+        normalized_message = re.sub(r'[-_\/]+', ' ', normalized_message)
+        # Collapse multiple spaces to single space
+        normalized_message = re.sub(r'\s+', ' ', normalized_message)
         
         if len(normalized_message) < 3:
             return {"intent": "unknown", "confidence": 0.0}
@@ -200,13 +202,13 @@ class IntentClassifier:
         tokens = re.findall(r'\b\w+\b', message.lower())
         token_set = set(tokens)
         
-        # Pattern matching (strongest signal)
+        # Pattern matching (strongest signal) - use normalized message
         pattern_matches = 0
         for pattern in self._compiled_patterns[intent]:
             if pattern.search(message):
                 pattern_matches += 1
         
-        # Keyword matching with word boundaries
+        # Keyword matching with word boundaries - use normalized message
         keyword_matches = 0
         multi_word_matches = 0
         single_word_matches = 0
@@ -215,7 +217,7 @@ class IntentClassifier:
             keyword_lower = keyword.lower()
             
             if len(keyword.split()) > 1:
-                # Multi-word keywords: use substring matching
+                # Multi-word keywords: use substring matching on normalized message
                 if keyword_lower in message.lower():
                     multi_word_matches += 1
                     keyword_matches += 1
@@ -317,7 +319,7 @@ class IntentClassifier:
 intent_classifier = IntentClassifier()
 
 
-def classify_intent(message: str) -> Dict[str, float]:
+def classify_intent(message: str) -> IntentResult:
     """
     Convenience function for intent classification.
     
