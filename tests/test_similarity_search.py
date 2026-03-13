@@ -82,15 +82,21 @@ class TestSimilaritySearchService:
     
     def test_similarity_threshold(self):
         """Test different similarity thresholds."""
+        # Use a borderline query string that should match with lenient threshold
+        borderline_query = "cannot login"
+        
         # High threshold - should be more selective
         strict_service = SimilaritySearchService(similarity_threshold=0.9)
-        result = strict_service.find_similar_ticket("login issue", self.resolved_tickets)
+        strict_result = strict_service.find_similar_ticket(borderline_query, self.resolved_tickets)
         
         # Low threshold - should be more permissive
         lenient_service = SimilaritySearchService(similarity_threshold=0.3)
-        result = lenient_service.find_similar_ticket("login issue", self.resolved_tickets)
+        lenient_result = lenient_service.find_similar_ticket(borderline_query, self.resolved_tickets)
         
+        # Assert threshold behavior
         assert lenient_service.similarity_threshold < strict_service.similarity_threshold
+        assert strict_result is None or strict_result.get("similarity_score", 0) < 0.9
+        assert lenient_result is not None and lenient_result.get("similarity_score", 0) >= 0.3
     
     def test_text_preprocessing(self):
         """Test text preprocessing functionality."""
@@ -106,13 +112,8 @@ class TestSimilaritySearchService:
         
         for input_text, expected_contains in test_cases:
             tokens = self.service._preprocess_text(input_text)
-            if expected_contains:
-                if expected_contains:
-                    for word in expected_contains.split():
-                        if word in tokens:
-                            break
-                else:
-                    assert tokens == []
+            expected_tokens = expected_contains.split() if expected_contains else []
+            assert tokens == expected_tokens
     
     def test_cosine_similarity_calculation(self):
         """Test cosine similarity calculation."""

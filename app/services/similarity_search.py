@@ -17,6 +17,7 @@ class SimilarTicketResult(TypedDict):
     """Result of similarity search."""
     matched_text: str
     similarity_score: float
+    matched_response: Optional[str] = None
 
 
 class SimilaritySearchService:
@@ -33,7 +34,13 @@ class SimilaritySearchService:
         
         Args:
             similarity_threshold: Minimum similarity score to consider a match (0.0-1.0)
+            
+        Raises:
+            ValueError: If similarity_threshold is not between 0.0 and 1.0
         """
+        if not (0.0 <= similarity_threshold <= 1.0):
+            raise ValueError(f"similarity_threshold must be between 0.0 and 1.0, got {similarity_threshold}")
+        
         self.similarity_threshold = similarity_threshold
     
     def _preprocess_text(self, text: str) -> List[str]:
@@ -92,9 +99,9 @@ class SimilaritySearchService:
             for term in unique_terms:
                 df[term] += 1
         
-        # Calculate IDF for each term
+        # Calculate IDF for each term with smoothing to prevent zeros
         total_docs = len(documents)
-        idf = {term: math.log(total_docs / count) for term, count in df.items()}
+        idf = {term: math.log((1 + total_docs) / (1 + count)) for term, count in df.items()}
         
         # Calculate TF-IDF for each document
         tfidf_scores = []
@@ -198,7 +205,8 @@ class SimilaritySearchService:
         if best_score >= self.similarity_threshold and best_match:
             return SimilarTicketResult(
                 matched_text=best_match['message'],
-                similarity_score=best_score
+                similarity_score=best_score,
+                matched_response=best_match.get('response')
             )
         
         return None
