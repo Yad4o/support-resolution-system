@@ -8,12 +8,7 @@ Author: Automated migration system
 
 import sqlite3
 import sys
-import logging
 from pathlib import Path
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 
 def add_response_column(db_path: str) -> bool:
@@ -45,14 +40,14 @@ def add_response_column(db_path: str) -> bool:
         """)
         
         conn.commit()
-        logger.info("Successfully added response column to tickets table")
+        print("Successfully added response column to tickets table")
         return True
         
     except sqlite3.Error as e:
-        logger.error(f"Database error: {e}")
+        print(f"Database error: {e}")
         return False
     except Exception as e:
-        logger.exception(f"Unexpected error during migration: {e}")
+        print(f"Error: {e}")
         return False
     finally:
         if 'conn' in locals():
@@ -91,33 +86,19 @@ def remove_response_column(db_path: str) -> bool:
             SELECT id, message, intent, confidence, status, created_at FROM tickets
         """)
         
-        # Capture existing schema artifacts before dropping table
-        cursor.execute("SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name='tickets'")
-        index_statements = [row[0] for row in cursor.fetchall() if row[0]]
-        
-        cursor.execute("SELECT sql FROM sqlite_master WHERE type='trigger' AND tbl_name='tickets'")
-        trigger_statements = [row[0] for row in cursor.fetchall() if row[0]]
-        
         # Drop old table and rename new table
         cursor.execute("DROP TABLE tickets")
         cursor.execute("ALTER TABLE tickets_new RENAME TO tickets")
         
-        # Recreate indexes and triggers
-        for index_sql in index_statements:
-            cursor.execute(index_sql)
-        
-        for trigger_sql in trigger_statements:
-            cursor.execute(trigger_sql)
-        
         conn.commit()
-        logger.info("Successfully removed response column from tickets table")
+        print("Successfully removed response column from tickets table")
         return True
         
     except sqlite3.Error as e:
-        logger.error(f"Database error: {e}")
+        print(f"Database error: {e}")
         return False
     except Exception as e:
-        logger.exception(f"Unexpected error during rollback: {e}")
+        print(f"Error: {e}")
         return False
     finally:
         if 'conn' in locals():

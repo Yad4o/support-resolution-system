@@ -90,7 +90,7 @@ class Ticket(Base):
         DateTime,
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
-        doc="Timestamp when the ticket was created",
+        doc="Timestamp when ticket was created",
     )
 
     # -------------------------------------------------

@@ -34,12 +34,13 @@ from app.schemas.ticket import (
 )
 from app.db.session import get_db
 from app.models.ticket import Ticket
+from fastapi import status
+
+# Import AI services for pipeline
 from app.services.classifier import classify_intent
 from app.services.similarity_search import find_similar_ticket
-from app.services.decision_engine import decide_resolution
+from app.services.decision import decide_resolution, ResolutionDecision
 from app.services.response_generator import generate_response
-from app.services.decision import ResolutionDecision
-from fastapi import status
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -56,33 +57,36 @@ def create_ticket(
     db: Session = Depends(get_db),
 ) -> TicketResponse:
     """
-    Create a new support ticket.
+    Create a new support ticket with full AI pipeline.
     
     Flow:
     -----
     1. Validate input using TicketCreate schema
-    2. Store ticket in database with status = 'open'
-    3. Return created ticket
+    2. Classify intent and confidence using AI
+    3. Search for similar resolved tickets
+    4. Run decision engine for auto-resolve vs escalate
+    5. If AUTO_RESOLVE: generate response and update ticket
+    6. If ESCALATE: set status to escalated
+    7. Handle AI failures gracefully (never block user)
     
     Args:
         ticket_data: Ticket creation data with message field
         db: Database session dependency
         
     Returns:
-        TicketResponse: Created ticket with all fields
+        TicketResponse: Created ticket with AI classification and response
         
     Raises:
         HTTPException: If database operation fails
     """
     try:
-        # Create ticket with default status="open"
+        # Step 1: Create ticket with initial status
         ticket = Ticket(
             message=ticket_data.message,
             status="open"
-            # intent, confidence, and created_at will be set by defaults
         )
         
-        # Save to database
+        # Step 2: Save initial ticket to get ID
         db.add(ticket)
         db.flush()
         db.refresh(ticket)
@@ -94,13 +98,10 @@ def create_ticket(
             ticket.intent = classification_result.get("intent")
             ticket.confidence = classification_result.get("confidence")
             
-            # Fetch resolved tickets for similarity search (limited to recent tickets)
+            # Fetch resolved tickets for similarity search
             resolved_tickets = db.query(Ticket).filter(
-                Ticket.status == "auto_resolved",
-                Ticket.response.isnot(None)
-            ).order_by(
-                Ticket.created_at.desc()
-            ).limit(50).all()  # Limit to 50 most recent resolved tickets
+                Ticket.status == "auto_resolved"
+            ).all()
             
             # Convert to list of dicts for similarity search
             resolved_tickets_list = [
@@ -109,6 +110,7 @@ def create_ticket(
                     "response": t.response
                 }
                 for t in resolved_tickets
+                if t.response  # Only include tickets with responses
             ]
             
             # Search for similar tickets
@@ -119,20 +121,27 @@ def create_ticket(
             decision = decide_resolution(ticket.confidence)
             
             if decision == ResolutionDecision.AUTO_RESOLVE:
-                # Auto-resolve with generated response
-                response = generate_response(ticket.intent, similar_solution)
-                ticket.response = response
+                # Generate response and auto-resolve
+                ai_response = generate_response(
+                    intent=ticket.intent,
+                    original_message=ticket.message,
+                    similar_solution=similar_solution
+                )
+                
+                ticket.response = ai_response
                 ticket.status = "auto_resolved"
                 
                 logger.info(
-                    f"Ticket {ticket.id} auto-resolved with confidence {ticket.confidence:.2f}"
+                    f"Ticket {ticket.id} auto-resolved with confidence {ticket.confidence} "
+                    f"and intent {ticket.intent}"
                 )
-            else:
-                # Escalate to human
+                
+            else:  # ESCALATE
                 ticket.status = "escalated"
                 
                 logger.info(
-                    f"Ticket {ticket.id} escalated with confidence {ticket.confidence:.2f}"
+                    f"Ticket {ticket.id} escalated with confidence {ticket.confidence} "
+                    f"and intent {ticket.intent}"
                 )
             
         except Exception as ai_error:
