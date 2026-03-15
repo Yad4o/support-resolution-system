@@ -13,6 +13,7 @@ Responsibilities:
 -----------------
 - Accept feedback for resolved tickets
 - Store feedback in database
+- Retrieve feedback for tickets
 - Keep feedback collection simple and reliable
 
 DO NOT:
@@ -22,56 +23,160 @@ DO NOT:
 - Change ticket resolution status here
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
+import logging
 
-from app.schemas.feedback import FeedbackCreate
+from app.schemas.feedback import FeedbackCreate, FeedbackResponse, FeedbackList
 from app.db.session import get_db
+from app.models.feedback import Feedback
+from app.models.ticket import Ticket
 
-# TODO (later imports):
-# from app.models.feedback import Feedback
-# from app.models.ticket import Ticket
+# Configure logging
+logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(
+    prefix="/feedback",
+    tags=["Feedback"]
+)
 
 
-@router.post("/{ticket_id}", status_code=status.HTTP_201_CREATED)
-def submit_feedback(
-    ticket_id: int,
-    payload: FeedbackCreate,
+@router.post("/", status_code=status.HTTP_201_CREATED, response_model=FeedbackResponse)
+def create_feedback(
+    feedback_data: FeedbackCreate,
     db: Session = Depends(get_db),
 ):
     """
-    Submit feedback for a resolved ticket.
-
+    Create feedback for a resolved ticket.
+    
     Flow:
     -----
-    1. Validate feedback input
+    1. Validate feedback input using FeedbackCreate schema
     2. Ensure ticket exists
     3. Store feedback in database
-    4. Return success response
-
-    TODO (Implementation Steps):
-    ----------------------------
-    - Fetch ticket by ID
-    - If ticket not found → return 404
-    - Create Feedback ORM object
-    - Commit DB transaction
+    4. Return created feedback record
+    
+    Args:
+        feedback_data: Feedback creation data with ticket_id, rating, resolved
+        db: Database session dependency
+        
+    Returns:
+        FeedbackResponse: Created feedback record
+        
+    Raises:
+        HTTPException: If ticket not found or database operation fails
     """
+    try:
+        # Validate that ticket exists
+        ticket = db.query(Ticket).filter(Ticket.id == feedback_data.ticket_id).first()
+        if not ticket:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Ticket with ID {feedback_data.ticket_id} not found"
+            )
+        
+        # Create feedback record
+        feedback = Feedback(
+            ticket_id=feedback_data.ticket_id,
+            rating=feedback_data.rating,
+            resolved=feedback_data.resolved
+        )
+        
+        # Save to database
+        db.add(feedback)
+        db.commit()
+        db.refresh(feedback)
+        
+        logger.info(f"Feedback created for ticket {feedback_data.ticket_id}: rating={feedback_data.rating}, resolved={feedback_data.resolved}")
+        
+        return FeedbackResponse.model_validate(feedback)
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 404 for missing ticket)
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.exception("Failed to create feedback")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error occurred while creating feedback"
+        )
 
-    # TODO: ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
-    # TODO: if not ticket → raise HTTPException(404)
 
-    # TODO: feedback = Feedback(
-    #           ticket_id=ticket_id,
-    #           rating=payload.rating,
-    #           resolved=payload.resolved
-    #       )
+@router.get("/{ticket_id}", response_model=FeedbackResponse)
+def get_feedback_by_ticket_id(
+    ticket_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Retrieve feedback for a specific ticket by ticket ID.
+    
+    Args:
+        ticket_id: ID of the ticket to get feedback for
+        db: Database session dependency
+        
+    Returns:
+        FeedbackResponse: Feedback record for the ticket
+        
+    Raises:
+        HTTPException: If feedback not found or database operation fails
+    """
+    try:
+        # Get feedback for the ticket
+        feedback = db.query(Feedback).filter(Feedback.ticket_id == ticket_id).first()
+        
+        if not feedback:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No feedback found for ticket with ID {ticket_id}"
+            )
+        
+        return FeedbackResponse.model_validate(feedback)
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        logger.exception(f"Failed to retrieve feedback for ticket {ticket_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error occurred while retrieving feedback"
+        )
 
-    # TODO: db.add(feedback)
-    # TODO: db.commit()
 
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Feedback submission not implemented yet",
-    )
+@router.get("/", response_model=Optional[FeedbackResponse])
+def get_feedback_by_query(
+    ticket_id: int = Query(..., description="ID of the ticket to get feedback for"),
+    db: Session = Depends(get_db),
+):
+    """
+    Retrieve feedback for a ticket using query parameter.
+    
+    Alternative endpoint to /{ticket_id} for flexibility.
+    
+    Args:
+        ticket_id: Query parameter for ticket ID
+        db: Database session dependency
+        
+    Returns:
+        FeedbackResponse: Feedback record for the ticket, or null if not found
+        
+    Raises:
+        HTTPException: If database operation fails
+    """
+    try:
+        # Get feedback for the ticket
+        feedback = db.query(Feedback).filter(Feedback.ticket_id == ticket_id).first()
+        
+        if not feedback:
+            return None
+        
+        return FeedbackResponse.model_validate(feedback)
+        
+    except Exception as e:
+        logger.exception(f"Failed to retrieve feedback for ticket {ticket_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error occurred while retrieving feedback"
+        )

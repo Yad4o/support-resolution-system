@@ -84,7 +84,7 @@ class Feedback(Base):
     # Relationships
     # -------------------------------------------------
     
-    ticket = relationship("Ticket", backref="feedback")
+    ticket = relationship("Ticket", back_populates="feedback")
 
     # -------------------------------------------------
     # TODO (Future Enhancements)

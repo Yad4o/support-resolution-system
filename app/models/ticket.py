@@ -24,6 +24,7 @@ DO NOT:
 
 from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Float, DateTime
+from sqlalchemy.orm import relationship
 
 from app.db.session import Base
 
@@ -99,3 +100,13 @@ class Ticket(Base):
     # - updated_at timestamp
     # - resolved_at timestamp
     # - user_id (foreign key)
+
+    # -------------------------------------------------
+    # Relationships
+    # -------------------------------------------------
+
+    feedback = relationship(
+        "Feedback",
+        back_populates="ticket",
+        doc="Feedback records for this ticket",
+    )
