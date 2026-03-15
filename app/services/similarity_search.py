@@ -194,8 +194,8 @@ def find_similar_ticket(new_message: str, resolved_tickets: List[Dict], similari
         # Calculate cosine similarity
         similarity = _cosine_similarity(new_tfidf, ticket_tfidf)
         
-        # Update best match if this is better
-        if similarity > best_similarity:
+        # Update best match if this is better (or equal for first candidate)
+        if similarity > best_similarity or (best_similarity == 0.0 and similarity == 0.0):
             best_similarity = similarity
             best_match = ticket_message
             best_ticket = ticket
