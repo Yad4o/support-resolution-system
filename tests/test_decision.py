@@ -1,5 +1,3 @@
-import pytest
-
 from app.services.decision import decide_resolution
 
 
