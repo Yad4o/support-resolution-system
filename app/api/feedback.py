@@ -194,24 +194,5 @@ def get_feedback_by_query(
     Raises:
         HTTPException: If feedback not found or database operation fails
     """
-    try:
-        # Get feedback for the ticket
-        feedback = db.query(Feedback).filter(Feedback.ticket_id == ticket_id).first()
-        
-        if not feedback:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No feedback found for ticket with ID {ticket_id}"
-            )
-        
-        return FeedbackResponse.model_validate(feedback)
-        
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
-    except Exception as e:
-        logger.exception(f"Failed to retrieve feedback for ticket {ticket_id}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error occurred while retrieving feedback"
-        )
+    # Delegate to the path-parameter endpoint to keep behavior and error handling consistent
+    return get_feedback_by_ticket_id(ticket_id=ticket_id, db=db)
