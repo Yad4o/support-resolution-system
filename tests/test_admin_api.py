@@ -105,37 +105,39 @@ def user_token(regular_user):
 
 
 @pytest.fixture(scope="function")
-def admin_client(admin_token, db_session):
-    """Create test client with admin authentication."""
-    def override_get_db():
-        try:
-            yield db_session
-        finally:
-            pass
+def make_client(db_session):
+    """Helper fixture to create TestClient with database override."""
+    def _create_client():
+        def override_get_db():
+            try:
+                yield db_session
+            finally:
+                pass
+        
+        app.dependency_overrides[get_db] = override_get_db
+        return TestClient(app)
     
-    app.dependency_overrides[get_db] = override_get_db
-    # We'll manually set the Authorization header in tests
-    try:
-        yield TestClient(app)
-    finally:
-        app.dependency_overrides.pop(get_db, None)
+    return _create_client
 
 
 @pytest.fixture(scope="function")
-def user_client(user_token, db_session):
+def admin_client(make_client, admin_token):
+    """Create test client with admin authentication."""
+    client = make_client()
+    with client:
+        yield client
+    # Clean up dependency override
+    app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.fixture(scope="function")
+def user_client(make_client, user_token):
     """Create test client with regular user authentication."""
-    def override_get_db():
-        try:
-            yield db_session
-        finally:
-            pass
-    
-    app.dependency_overrides[get_db] = override_get_db
-    # We'll manually set the Authorization header in tests
-    try:
-        yield TestClient(app)
-    finally:
-        app.dependency_overrides.pop(get_db, None)
+    client = make_client()
+    with client:
+        yield client
+    # Clean up dependency override
+    app.dependency_overrides.pop(get_db, None)
 
 
 class TestAdminAPI:

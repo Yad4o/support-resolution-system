@@ -118,7 +118,7 @@ def get_metrics(
         total_feedback = db.query(Feedback).count()
         
         # Use a simpler approach for counting resolved feedback
-        resolved_feedback_count = db.query(Feedback).filter(Feedback.resolved == True).count()
+        resolved_feedback_count = db.query(Feedback).filter(Feedback.resolved.is_(True)).count()
         avg_rating_result = db.query(func.avg(Feedback.rating)).scalar()
         average_rating = float(avg_rating_result) if avg_rating_result else 0.0
         
