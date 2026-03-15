@@ -44,6 +44,94 @@ from fastapi import status
 # Configure logging
 logger = logging.getLogger(__name__)
 
+
+def _run_ticket_automation(ticket: Ticket, db: Session) -> Ticket:
+    """
+    Run the AI automation pipeline for a given ticket.
+
+    This function encapsulates the orchestration of:
+    - Intent classification
+    - Similarity search against resolved tickets
+    - Resolution decision (auto-resolve vs escalate)
+    - Response generation for auto-resolved tickets
+
+    It updates and persists the ticket accordingly and returns the
+    refreshed instance.
+    """
+    # Classify intent
+    classification = classify_intent(ticket.message)
+    intent = classification["intent"]
+    confidence = classification["confidence"]
+
+    # Update ticket with classification results
+    ticket.intent = intent
+    ticket.confidence = confidence
+
+    # Fetch resolved tickets for similarity search
+    resolved_tickets = (
+        db.query(Ticket)
+        .filter(
+            Ticket.status == "auto_resolved",
+            Ticket.response.isnot(None),
+        )
+        .order_by(Ticket.created_at.desc())
+        .limit(50)
+        .all()
+    )
+
+    # Convert to list of dicts for similarity search
+    resolved_tickets_data = []
+    for resolved_ticket in resolved_tickets:
+        resolved_tickets_data.append(
+            {
+                "message": resolved_ticket.message,
+                "response": resolved_ticket.response,
+            }
+        )
+
+    # Find similar tickets
+    similar_result = find_similar_ticket(
+        ticket.message,
+        resolved_tickets_data,
+        similarity_threshold=settings.SIMILARITY_THRESHOLD,
+    )
+
+    # Make decision
+    decision = decide_resolution(confidence)
+
+    # Process decision
+    if decision == "AUTO_RESOLVE":
+        # Generate response
+        similar_solution = (
+            similar_result["ticket"]["response"] if similar_result else None
+        )
+        response = generate_response(intent, ticket.message, similar_solution)
+
+        # Update ticket
+        ticket.status = "auto_resolved"
+        ticket.response = response
+
+        logger.info(
+            f"Ticket {ticket.id} auto-resolved with intent {intent} "
+            f"(confidence: {confidence})"
+        )
+    else:  # ESCALATE
+        # Update ticket
+        ticket.status = "escalated"
+        ticket.response = None
+
+        logger.info(
+            f"Ticket {ticket.id} escalated with intent {intent} "
+            f"(confidence: {confidence})"
+        )
+
+    # Save AI results
+    db.commit()
+    db.refresh(ticket)
+
+    return ticket
+
+
 router = APIRouter(
     prefix="/tickets",
     tags=["Tickets"]
@@ -94,61 +182,7 @@ def create_ticket(
         
         # Step 2: Run AI pipeline
         try:
-            # Classify intent
-            classification = classify_intent(ticket.message)
-            intent = classification["intent"]
-            confidence = classification["confidence"]
-            
-            # Update ticket with classification results
-            ticket.intent = intent
-            ticket.confidence = confidence
-            
-            # Fetch resolved tickets for similarity search
-            resolved_tickets = db.query(Ticket).filter(
-                Ticket.status == "auto_resolved",
-                Ticket.response.isnot(None)
-            ).order_by(Ticket.created_at.desc()).limit(50).all()
-            
-            # Convert to list of dicts for similarity search
-            resolved_tickets_data = []
-            for resolved_ticket in resolved_tickets:
-                resolved_tickets_data.append({
-                    "message": resolved_ticket.message,
-                    "response": resolved_ticket.response
-                })
-            
-            # Find similar tickets
-            similar_result = find_similar_ticket(
-                ticket.message, 
-                resolved_tickets_data,
-                similarity_threshold=settings.SIMILARITY_THRESHOLD
-            )
-            
-            # Make decision
-            decision = decide_resolution(confidence)
-            
-            # Process decision
-            if decision == "AUTO_RESOLVE":
-                # Generate response
-                similar_solution = similar_result["ticket"]["response"] if similar_result else None
-                response = generate_response(intent, ticket.message, similar_solution)
-                
-                # Update ticket
-                ticket.status = "auto_resolved"
-                ticket.response = response
-                
-                logger.info(f"Ticket {ticket.id} auto-resolved with intent {intent} (confidence: {confidence})")
-                
-            else:  # ESCALATE
-                # Update ticket
-                ticket.status = "escalated"
-                ticket.response = None
-                
-                logger.info(f"Ticket {ticket.id} escalated with intent {intent} (confidence: {confidence})")
-            
-            # Save AI results
-            db.commit()
-            db.refresh(ticket)
+            ticket = _run_ticket_automation(ticket=ticket, db=db)
             
         except Exception as ai_error:
             # AI failure: escalate for safety (never block user)
