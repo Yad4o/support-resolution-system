@@ -11,13 +11,18 @@ def generate_response(intent: str, original_message: str, similar_solution: Opti
     Args:
         intent: The classified intent (e.g., 'login_issue', 'payment_issue')
         original_message: The original user message for context
-        similar_solution: Optional solution from a similar resolved ticket to reuse
+        similar_solution: Optional solution from a similar resolved ticket to reuse.
+                          NOTE: This parameter is trusted/raw user-provided content.
+                          Callers are responsible for sanitization/validation before
+                          calling this function. The function will pass through the
+                          similar_solution verbatim without sanitization.
         
     Returns:
         str: Generated response text
     """
     
     # Priority 1: Reuse similar solution if provided
+    # NOTE: similar_solution is passed through verbatim - callers must sanitize
     if similar_solution and similar_solution.strip():
         return f"I understand you're experiencing an issue. Based on a similar case, here's what helped: {similar_solution}"
     
@@ -62,13 +67,13 @@ def generate_response(intent: str, original_message: str, similar_solution: Opti
         # Select template based on original message characteristics
         if "?" in original_message or "how" in original_message.lower():
             # Use more helpful template for questions
-            return templates[0] if len(templates) > 0 else "I understand your question. Let me help you with that."
+            return templates[0]
         elif "urgent" in original_message.lower() or "emergency" in original_message.lower():
             # Use more urgent template
-            return templates[1] if len(templates) > 1 else templates[0]
+            return templates[1]
         else:
-            # Use default template
-            return templates[0] if len(templates) > 0 else "I understand your request and will help you with that."
+            # Use default template (third template)
+            return templates[2]
     
     # Priority 3: Fallback response
     fallback_responses = [

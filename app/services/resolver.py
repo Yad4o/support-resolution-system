@@ -3,7 +3,7 @@ app/services/resolver.py
 
 Purpose:
 --------
-Generates a human-readable resolution message for a support ticket.
+Resolver service that provides high-level ticket resolution coordination.
 
 Owner:
 ------
@@ -11,107 +11,59 @@ Prajwal (AI / NLP / Response Generation)
 
 Why this exists:
 ----------------
-Once we understand WHAT the problem is (intent),
-we must generate a clear, helpful response for the user.
+Coordinates the overall ticket resolution process by integrating
+intent classification, similarity search, decision making, and response generation.
 
 Responsibilities:
 -----------------
-- Generate solution text based on intent
-- Reuse known solutions when possible
-- Ensure responses are polite and clear
+- Coordinate ticket resolution pipeline
+- Import and use specialized services
+- Maintain resolver-specific plumbing
 
 DO NOT:
 -------
-- Decide auto vs escalate
-- Access database
+- Duplicate implementation of specialized services
+- Access database directly
 - Modify ticket status
 """
 
-from typing import Optional
+from app.services.response_generator import generate_response
+from app.services.similarity_search import find_similar_ticket
+from app.services.classifier import classify_intent
+from app.services.decision import decide_resolution, ResolutionDecision
 
 
-def generate_response(
-    intent: str,
-    original_message: str,
-    similar_solution: Optional[str] = None,
-) -> str:
+def resolve_ticket(new_message: str, resolved_tickets: list[dict], similarity_threshold: float = None) -> dict:
     """
-    Generate a response for a support ticket.
-
-    Parameters:
-    -----------
-    intent : str
-        Predicted intent category (e.g., 'login_issue', 'payment')
-
-    original_message : str
-        Original customer message (used for context)
-
-    similar_solution : Optional[str]
-        Previously used solution for a similar ticket (if found)
-
+    High-level ticket resolution coordination.
+    
+    Args:
+        new_message: New ticket message to resolve
+        resolved_tickets: List of resolved tickets for similarity search
+        similarity_threshold: Optional threshold for similarity matching
+        
     Returns:
-    --------
-    str
-        Final response message to be shown to the user
+        dict: Resolution result with intent, response, and decision
     """
-
-    # -------------------------------------------------
-    # STEP 1: Reuse known solution (highest priority)
-    # -------------------------------------------------
-    """
-    If a similar ticket was found earlier and its solution
-    worked well, reuse that solution directly.
-    """
-
-    if similar_solution:
-        # TODO:
-        # - Slightly rephrase (optional)
-        # - Ensure tone is polite
-        return similar_solution
-
-    # -------------------------------------------------
-    # STEP 2: Intent-based static responses (MVP)
-    # -------------------------------------------------
-    """
-    Initial version should use predefined responses.
-
-    Example:
-    - login_issue → password reset steps
-    - payment → billing FAQ
-    """
-
-    if intent == "login_issue":
-        return (
-            "It looks like you're having trouble logging in. "
-            "Please try resetting your password using the "
-            "'Forgot Password' option on the login page."
-        )
-
-    if intent == "payment_issue":
-        return (
-            "We noticed a payment-related issue. "
-            "Please check your billing details and ensure "
-            "your payment method is valid."
-        )
-
-    # -------------------------------------------------
-    # STEP 3: AI-generated response (future)
-    # -------------------------------------------------
-    """
-    TODO (Advanced):
-    - Use OpenAI / LLM to generate contextual response
-    - Include safety checks
-    - Keep responses concise
-    """
-
-    # -------------------------------------------------
-    # STEP 4: Fallback response
-    # -------------------------------------------------
-    """
-    Used when intent is unknown or confidence is low.
-    """
-
-    return (
-        "Thanks for reaching out. "
-        "We are reviewing your issue and will get back to you shortly."
-    )
+    # Classify intent
+    classification = classify_intent(new_message)
+    intent = classification["intent"]
+    confidence = classification["confidence"]
+    
+    # Find similar solution
+    similar_result = find_similar_ticket(new_message, resolved_tickets, similarity_threshold)
+    similar_solution = similar_result["ticket"]["response"] if similar_result else None
+    
+    # Generate response
+    response = generate_response(intent, new_message, similar_solution)
+    
+    # Make decision
+    decision = decide_resolution(confidence, similar_solution_found=similar_result is not None)
+    
+    return {
+        "intent": intent,
+        "confidence": confidence,
+        "response": response,
+        "decision": decision,
+        "similar_ticket": similar_result
+    }
