@@ -23,7 +23,6 @@ DO NOT:
 - Change ticket resolution status here
 """
 
-from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
