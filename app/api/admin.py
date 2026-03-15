@@ -35,6 +35,12 @@ from app.models.ticket import Ticket
 from app.models.feedback import Feedback
 from app.models.user import User
 from app.api.auth import get_current_user
+from app.core.exceptions import (
+    AuthorizationError,
+    ValidationError,
+    InternalError,
+    NotFoundError
+)
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -56,13 +62,10 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
         Current user if admin
         
     Raises:
-        HTTPException: 403 Forbidden if user is not admin
+        AuthorizationError: If user is not admin
     """
     if current_user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied. Admin role required."
-        )
+        raise AuthorizationError("Access denied. Admin role required.")
     return current_user
 
 
@@ -152,10 +155,7 @@ def get_metrics(
         
     except Exception as e:
         logger.exception("Failed to retrieve admin metrics")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error occurred while retrieving metrics"
-        ) from e
+        raise InternalError("Failed to retrieve metrics") from e
 
 
 @router.get("/tickets", response_model=Dict[str, Any])
@@ -190,9 +190,8 @@ def list_all_tickets(
     """
     # Validate status filter if provided
     if status_filter is not None and status_filter not in ALLOWED_TICKET_STATUSES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid status '{status_filter}'. Allowed statuses: {', '.join(sorted(ALLOWED_TICKET_STATUSES))}"
+        raise ValidationError(
+            f"Invalid status '{status_filter}'. Allowed statuses: {', '.join(sorted(ALLOWED_TICKET_STATUSES))}"
         )
     
     try:
@@ -249,7 +248,4 @@ def list_all_tickets(
         
     except Exception as e:
         logger.exception("Failed to retrieve admin tickets list")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error occurred while retrieving tickets"
-        ) from e
+        raise InternalError("Failed to retrieve tickets") from e

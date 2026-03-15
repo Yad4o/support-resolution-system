@@ -258,20 +258,24 @@ class TestFeedbackModel:
         with Session(engine) as db:
             # Clean up any existing feedback first
             db.query(Feedback).delete()
+            db.query(Ticket).delete()
             db.commit()
             
-            # Create a ticket first
-            ticket = Ticket(message="Test ticket for feedback queries")
-            db.add(ticket)
-            db.commit()
-            db.refresh(ticket)
+            # Create multiple tickets for different feedback entries
+            tickets = []
+            for i in range(4):
+                ticket = Ticket(message=f"Test ticket {i+1} for feedback queries")
+                db.add(ticket)
+                db.commit()
+                db.refresh(ticket)
+                tickets.append(ticket)
             
-            # Create feedback with different ratings
+            # Create feedback with different ratings for different tickets
             feedback_entries = [
-                Feedback(ticket_id=ticket.id, rating=5, resolved=True),
-                Feedback(ticket_id=ticket.id, rating=3, resolved=False),
-                Feedback(ticket_id=ticket.id, rating=4, resolved=True),
-                Feedback(ticket_id=ticket.id, rating=5, resolved=False),
+                Feedback(ticket_id=tickets[0].id, rating=5, resolved=True),
+                Feedback(ticket_id=tickets[1].id, rating=3, resolved=False),
+                Feedback(ticket_id=tickets[2].id, rating=4, resolved=True),
+                Feedback(ticket_id=tickets[3].id, rating=5, resolved=False),
             ]
             
             for feedback in feedback_entries:
@@ -292,20 +296,24 @@ class TestFeedbackModel:
         with Session(engine) as db:
             # Clean up any existing feedback first
             db.query(Feedback).delete()
+            db.query(Ticket).delete()
             db.commit()
             
-            # Create a ticket first
-            ticket = Ticket(message="Test ticket for resolved queries")
-            db.add(ticket)
-            db.commit()
-            db.refresh(ticket)
+            # Create multiple tickets for different feedback entries
+            tickets = []
+            for i in range(4):
+                ticket = Ticket(message=f"Test ticket {i+1} for resolved queries")
+                db.add(ticket)
+                db.commit()
+                db.refresh(ticket)
+                tickets.append(ticket)
             
-            # Create feedback with different resolved statuses
+            # Create feedback with different resolved statuses for different tickets
             feedback_entries = [
-                Feedback(ticket_id=ticket.id, rating=5, resolved=True),
-                Feedback(ticket_id=ticket.id, rating=3, resolved=False),
-                Feedback(ticket_id=ticket.id, rating=4, resolved=True),
-                Feedback(ticket_id=ticket.id, rating=2, resolved=False),
+                Feedback(ticket_id=tickets[0].id, rating=5, resolved=True),
+                Feedback(ticket_id=tickets[1].id, rating=3, resolved=False),
+                Feedback(ticket_id=tickets[2].id, rating=4, resolved=True),
+                Feedback(ticket_id=tickets[3].id, rating=2, resolved=False),
             ]
             
             for feedback in feedback_entries:
