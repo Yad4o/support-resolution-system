@@ -26,6 +26,7 @@ DO NOT:
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 import logging
 
 from app.schemas.feedback import FeedbackCreate, FeedbackResponse, FeedbackList
@@ -76,6 +77,21 @@ def create_feedback(
                 detail=f"Ticket with ID {feedback_data.ticket_id} not found"
             )
         
+        # Check if ticket is in resolved state
+        if ticket.status not in ["auto_resolved", "closed"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Ticket {feedback_data.ticket_id} is not resolved (current status: {ticket.status})"
+            )
+        
+        # Check for existing feedback to prevent duplicates
+        existing_feedback = db.query(Feedback).filter(Feedback.ticket_id == feedback_data.ticket_id).first()
+        if existing_feedback:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Feedback already exists for ticket {feedback_data.ticket_id}"
+            )
+        
         # Create feedback record
         feedback = Feedback(
             ticket_id=feedback_data.ticket_id,
@@ -95,6 +111,19 @@ def create_feedback(
     except HTTPException:
         # Re-raise HTTP exceptions (like 404 for missing ticket)
         raise
+    except IntegrityError as e:
+        db.rollback()
+        if "UNIQUE constraint failed" in str(e) or "duplicate key" in str(e).lower():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Feedback already exists for ticket {feedback_data.ticket_id}"
+            )
+        else:
+            logger.exception("Database integrity error while creating feedback")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Internal server error occurred while creating feedback"
+            )
     except Exception as e:
         db.rollback()
         logger.exception("Failed to create feedback")

@@ -23,7 +23,7 @@ DO NOT:
 """
 
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, Boolean, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.db.session import Base
@@ -38,6 +38,10 @@ class Feedback(Base):
     """
 
     __tablename__ = "feedback"
+
+    __table_args__ = (
+        UniqueConstraint('ticket_id', name='uq_feedback_ticket_id'),
+    )
 
     def __repr__(self):
         """Return a meaningful string representation of the feedback."""

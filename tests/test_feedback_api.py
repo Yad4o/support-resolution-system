@@ -1,4 +1,7 @@
 import pytest
+import tempfile
+import os
+import time
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -8,34 +11,36 @@ from app.models.ticket import Ticket
 from app.models.feedback import Feedback
 
 
-# Test database setup
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test_feedback.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
-def override_get_db():
+@pytest.fixture(scope="function")
+def temp_db():
+    """Create temporary database for each test."""
+    fd, path = tempfile.mkstemp(suffix='.db')
+    os.close(fd)  # Close file descriptor, keep path for SQLAlchemy
+    yield path
+    # Clean up after test - use try/except for Windows file locking
     try:
-        db = TestingSessionLocal()
-        yield db
-    finally:
-        db.close()
+        if os.path.exists(path):
+            os.unlink(path)
+    except (OSError, PermissionError):
+        # File might be locked, try again after a short delay
+        import time
+        time.sleep(0.1)
+        try:
+            if os.path.exists(path):
+                os.unlink(path)
+        except (OSError, PermissionError):
+            # If still locked, leave it for OS cleanup
+            pass
 
 
 @pytest.fixture(scope="function")
-def client():
-    """Create test client with database override."""
-    app.dependency_overrides[get_db] = override_get_db
-    try:
-        yield TestClient(app)
-    finally:
-        # Clean up override after test
-        app.dependency_overrides.pop(get_db, None)
-
-
-@pytest.fixture(scope="function")
-def db_session():
-    """Create test database session."""
+def db_session(temp_db):
+    """Create test database session with temporary database."""
+    # Use temporary database path
+    test_db_url = f"sqlite:///{temp_db}"
+    engine = create_engine(test_db_url, connect_args={"check_same_thread": False})
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    
     # Import models to ensure they're registered with Base
     from app.models.feedback import Feedback
     from app.models.ticket import Ticket
@@ -46,7 +51,25 @@ def db_session():
         yield db
     finally:
         db.close()
+        engine.dispose()  # Dispose engine to release file locks
         Base.metadata.drop_all(bind=engine)
+
+
+@pytest.fixture(scope="function")
+def client(db_session):
+    """Create test client with database override."""
+    def override_get_db():
+        try:
+            yield db_session
+        finally:
+            pass
+    
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        yield TestClient(app)
+    finally:
+        # Clean up override after test
+        app.dependency_overrides.pop(get_db, None)
 
 
 class TestFeedbackAPI:
@@ -83,6 +106,62 @@ class TestFeedbackAPI:
         assert feedback_response["resolved"] is True
         assert "id" in feedback_response
         assert "created_at" in feedback_response
+
+    def test_create_feedback_ticket_not_resolved(self, client, db_session):
+        """Test feedback creation with non-resolved ticket."""
+        # Create a ticket that's not resolved
+        ticket = Ticket(
+            message="Test ticket not resolved",
+            intent="general",
+            confidence=0.8,
+            status="open"  # Not resolved
+        )
+        db_session.add(ticket)
+        db_session.commit()
+        db_session.refresh(ticket)
+        
+        feedback_data = {
+            "ticket_id": ticket.id,
+            "rating": 3,
+            "resolved": False
+        }
+        
+        response = client.post("/feedback/", json=feedback_data)
+        
+        assert response.status_code == 400
+        error_detail = response.json()
+        assert "not resolved" in error_detail["detail"].lower()
+
+    def test_create_feedback_duplicate(self, client, db_session):
+        """Test duplicate feedback prevention."""
+        # Create a resolved ticket
+        ticket = Ticket(
+            message="Test ticket for duplicate",
+            intent="payment_issue",
+            confidence=0.7,
+            status="auto_resolved",
+            response="Payment issue resolved"
+        )
+        db_session.add(ticket)
+        db_session.commit()
+        db_session.refresh(ticket)
+        
+        # Create first feedback
+        feedback_data = {
+            "ticket_id": ticket.id,
+            "rating": 4,
+            "resolved": True
+        }
+        
+        response1 = client.post("/feedback/", json=feedback_data)
+        assert response1.status_code == 201
+        
+        # Try to create second feedback for same ticket
+        response2 = client.post("/feedback/", json=feedback_data)
+        
+        assert response2.status_code == 409
+        error_detail = response2.json()
+        assert "already exists" in error_detail["detail"].lower()
 
     def test_create_feedback_ticket_not_found(self, client, db_session):
         """Test feedback creation with non-existent ticket."""
