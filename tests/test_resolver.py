@@ -1,9 +1,9 @@
-from app.services.resolver import generate_response
+from app.services.response_generator import generate_response
 
 
 def test_resolver_returns_string():
     """
-    Resolver must always return a string.
+    Response generator must always return a string.
     """
     response = generate_response(
         intent="login_issue",
@@ -14,14 +14,16 @@ def test_resolver_returns_string():
 
 def test_resolver_uses_similar_solution():
     """
-    If similar solution exists, reuse it.
+    If similar solution exists, reuse it with polite wrapper.
     """
     response = generate_response(
         intent="login_issue",
         original_message="Cannot login",
         similar_solution="Reset your password"
     )
-    assert response == "Reset your password"
+    assert "I understand you're experiencing an issue" in response
+    assert "Based on a similar case" in response
+    assert "Reset your password" in response
 
 
 def test_resolver_fallback_response():
