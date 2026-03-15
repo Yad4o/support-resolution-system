@@ -23,7 +23,7 @@ DO NOT:
 """
 
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, Boolean, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.db.session import Base
@@ -38,6 +38,17 @@ class Feedback(Base):
     """
 
     __tablename__ = "feedback"
+
+    # NOTE:
+    # -----
+    # This UniqueConstraint is only created automatically for new databases.
+    # The app's init_db() path uses Base.metadata.create_all(), which does NOT
+    # apply ALTERs to existing tables. For existing deployments (or a checked-in
+    # SQLite database), you MUST run an explicit migration or fully recreate the
+    # database schema to ensure this uniqueness is enforced at the DB level.
+    __table_args__ = (
+        UniqueConstraint('ticket_id', name='uq_feedback_ticket_id'),
+    )
 
     def __repr__(self):
         """Return a meaningful string representation of the feedback."""
@@ -84,7 +95,7 @@ class Feedback(Base):
     # Relationships
     # -------------------------------------------------
     
-    ticket = relationship("Ticket", backref="feedback")
+    ticket = relationship("Ticket", back_populates="feedback")
 
     # -------------------------------------------------
     # TODO (Future Enhancements)
