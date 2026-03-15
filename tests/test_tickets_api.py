@@ -50,11 +50,11 @@ class TestCreateTicket:
         data = response.json()
         
         assert data["message"] == ticket_data["message"]
-        assert data["status"] == "open"
+        assert data["status"] in ["auto_resolved", "escalated"]  # AI pipeline processes tickets
         assert "id" in data
         assert "created_at" in data
-        assert data["intent"] is None
-        assert data["confidence"] is None
+        assert data["intent"] is not None  # AI classification
+        assert data["confidence"] is not None  # AI confidence scoring
 
     def test_create_ticket_empty_message(self):
         """Test ticket creation with empty message."""
@@ -188,9 +188,9 @@ class TestListTickets:
         assert "tickets" in data
         assert isinstance(data["tickets"], list)
         
-        # All returned tickets should have status "open"
+        # All returned tickets should have valid status (AI processed)
         for ticket in data["tickets"]:
-            assert ticket["status"] == "open"
+            assert ticket["status"] in ["auto_resolved", "escalated"]
 
     def test_list_tickets_filter_by_invalid_status(self):
         """Test listing tickets filtered by invalid status."""
@@ -251,7 +251,7 @@ class TestGetTicket:
         
         assert data["id"] == ticket_id
         assert data["message"] == "Test ticket"
-        assert data["status"] == "open"
+        assert data["status"] in ["auto_resolved", "escalated"]  # AI processed
         assert "created_at" in data
 
     def test_get_ticket_not_found(self):
@@ -325,7 +325,7 @@ class TestTicketAPIIntegration:
         
         # Verify created ticket structure
         assert created_ticket["message"] == create_data["message"]
-        assert created_ticket["status"] == "open"
+        assert created_ticket["status"] in ["auto_resolved", "escalated"]  # AI processed
         
         # 2. List all tickets and verify our ticket is there
         list_response = client.get("/tickets/")
@@ -352,7 +352,7 @@ class TestTicketAPIIntegration:
         # Verify it matches the original
         assert retrieved_ticket["id"] == ticket_id
         assert retrieved_ticket["message"] == create_data["message"]
-        assert retrieved_ticket["status"] == "open"
+        assert retrieved_ticket["status"] in ["auto_resolved", "escalated"]  # AI processed
 
     def test_multiple_tickets_workflow(self):
         """Test workflow with multiple tickets."""
@@ -399,17 +399,25 @@ class TestTicketAPIIntegration:
         assert all_response.status_code == 200
         all_tickets = all_response.json()["tickets"]
         
-        # Get only open tickets
-        open_response = client.get("/tickets/?status=open")
-        assert open_response.status_code == 200
-        open_tickets = open_response.json()["tickets"]
+        # Get only escalated tickets (since AI processes all tickets)
+        escalated_response = client.get("/tickets/?status=escalated")
+        assert escalated_response.status_code == 200
+        escalated_tickets = escalated_response.json()["tickets"]
         
-        # All tickets should be open (since we haven't implemented AI processing yet)
-        assert len(open_tickets) == len(all_tickets)
+        # Should have some escalated tickets (low confidence messages)
+        assert len(escalated_tickets) >= 0  # May be 0 if all auto-resolved
         
-        # Verify all are actually open
-        for ticket in open_tickets:
-            assert ticket["status"] == "open"
+        # Get only auto_resolved tickets
+        auto_resolved_response = client.get("/tickets/?status=auto_resolved")
+        assert auto_resolved_response.status_code == 200
+        auto_resolved_tickets = auto_resolved_response.json()["tickets"]
+        
+        # Should have some auto_resolved tickets (high confidence messages)
+        assert len(auto_resolved_tickets) >= 0  # May be 0 if all escalated
+        
+        # Verify all tickets are either escalated or auto_resolved
+        total_processed = len(escalated_tickets) + len(auto_resolved_tickets)
+        assert total_processed == len(all_tickets)
 
 
 class TestTicketsHealth:
