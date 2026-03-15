@@ -164,7 +164,15 @@ def classify_intent(message: str) -> Dict[str, float]:
             
             # Special handling for general queries with "explain" + billing context
             if intent == "general_query" and "explain" in text and "billing" in text:
-                calculated_confidence = max(calculated_confidence, 0.85)
+                calculated_confidence = max(calculated_confidence, 0.95)
+            
+            # Special handling: reduce payment_issue confidence for "explain" queries without action verbs
+            if intent == "payment_issue" and "explain" in text and "billing" in text:
+                # Check if this is an informational query (no action verbs like charge, failed, etc.)
+                action_verbs = ["charge", "charged", "failed", "declined", "debit", "refund", "transaction"]
+                has_action_verb = any(verb in text for verb in action_verbs)
+                if not has_action_verb:
+                    calculated_confidence *= 0.7  # Reduce confidence for informational queries
             
             # Special handling: if account_issue has account keywords, give it priority
             if intent == "account_issue" and any(kw in text for kw in ["account", "delete", "profile"]):
@@ -173,6 +181,13 @@ def classify_intent(message: str) -> Dict[str, float]:
             if calculated_confidence > highest_score:
                 highest_score = calculated_confidence
                 best_match = intent
+            elif calculated_confidence == highest_score and best_match:
+                # Tie-breaker: use priority order (earlier in intent_priority wins)
+                current_priority = intent_priority.index(intent) if intent in intent_priority else len(intent_priority)
+                best_priority = intent_priority.index(best_match) if best_match in intent_priority else len(intent_priority)
+                if current_priority < best_priority:
+                    highest_score = calculated_confidence
+                    best_match = intent
 
     # -------- Return Result -------- #
     
