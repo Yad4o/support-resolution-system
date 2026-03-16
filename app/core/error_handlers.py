@@ -29,6 +29,7 @@ from typing import Dict, Any, Optional
 from fastapi import Request, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.exceptions import (
     BaseAPIException,
@@ -205,6 +206,11 @@ def setup_exception_handlers(app) -> None:
     """
     # Register handlers for different exception types
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    # Register both FastAPI and Starlette HTTPException variants.
+    # FastAPI raises its own HTTPException in route handlers, but the router
+    # raises starlette.exceptions.HTTPException for 404/405. We need both so
+    # route-not-found and method-not-allowed errors use our standardised format.
+    app.add_exception_handler(StarletteHTTPException, http_exception_handler)
     app.add_exception_handler(HTTPException, http_exception_handler)
     app.add_exception_handler(BaseAPIException, api_exception_handler)
     app.add_exception_handler(Exception, general_exception_handler)
