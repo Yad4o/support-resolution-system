@@ -99,18 +99,19 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     # Log the HTTP exception
     logger.warning(f"HTTP exception in {request.method} {request.url}: {exc.status_code} - {exc.detail}")
     
-    # Map HTTP status codes to our error types
+    # Map HTTP status codes to our custom exception types
     error_mapping = {
         400: AppValidationError,
         401: AuthenticationError,
         403: AuthorizationError,
         404: NotFoundError,
+        405: InternalError,
         429: RateLimitError,
         500: InternalError,
     }
-    
+
     error_class = error_mapping.get(exc.status_code, InternalError)
-    
+
     # Create exception with appropriate constructor
     try:
         if exc.status_code == 400:
@@ -125,7 +126,12 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
             f"detail={getattr(exc, 'detail', None)}"
         )
         app_exc = InternalError(message=exc.detail)
-    
+
+    # Ensure the JSON body status_code reflects the real HTTP status, not
+    # the default from the exception class (e.g. InternalError defaults to 500
+    # but a 405 should report 405 in the body as well).
+    app_exc.status_code = exc.status_code
+
     return JSONResponse(
         status_code=exc.status_code,
         content=create_error_response(app_exc)
