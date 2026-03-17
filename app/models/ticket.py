@@ -27,11 +27,7 @@ from sqlalchemy import Column, Integer, String, Float, DateTime
 from sqlalchemy.orm import relationship
 
 from app.db.session import Base
-# Import Feedback for relationship
-try:
-    from app.models.feedback import Feedback
-except ImportError:
-    Feedback = None
+from app.models.feedback import Feedback
 
 
 class Ticket(Base):
@@ -110,10 +106,9 @@ class Ticket(Base):
     # Relationships
     # -------------------------------------------------
 
-    if Feedback:
-        feedback = relationship(
-            "Feedback",
-            back_populates="ticket",
-            uselist=False,
-            doc="Feedback record for this ticket (one-to-one)",
-        )
+    feedback = relationship(
+        "Feedback",
+        back_populates="ticket",
+        uselist=False,
+        doc="Feedback record for this ticket (one-to-one)",
+    )
