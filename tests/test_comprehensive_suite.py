@@ -25,7 +25,6 @@ from app.models.ticket import Ticket
 from tests.test_ai_mocks import (
     MockAIService, 
     TestScenarios, 
-    setup_test_data,
     create_mock_ai_service
 )
 
@@ -66,235 +65,164 @@ def db_session():
         Base.metadata.drop_all(bind=engine)
 
 
-@pytest.fixture(scope="function")
-def mock_ai():
-    """Create mock AI service for testing."""
-    return setup_test_data()
+class TestRealAIImplementation:
+    """Test real AI service implementations with realistic inputs."""
 
-
-class TestDeterministicClassification:
-    """Test classification with deterministic mocked responses."""
-
-    def test_login_issue_classification(self, mock_ai):
-        """Test login issue classification."""
-        result = mock_ai.classifier.classify("I cannot login to my account")
+    def test_real_intent_classification(self):
+        """Test real intent classifier with realistic inputs."""
+        from app.services.classifier import classify_intent
         
-        assert result["intent"] == "login_issue"
-        assert result["confidence"] == 0.85
-        assert isinstance(result["confidence"], float)
-
-    def test_payment_issue_classification(self, mock_ai):
-        """Test payment issue classification."""
-        result = mock_ai.classifier.classify("My payment was charged twice")
-        
-        assert result["intent"] == "payment_issue"
-        assert result["confidence"] == 0.92
-
-    def test_unknown_classification(self, mock_ai):
-        """Test unknown message classification."""
-        result = mock_ai.classifier.classify("xyz123 random text")
-        
-        assert result["intent"] == "unknown"
-        assert result["confidence"] == 0.3
-
-    def test_empty_message_classification(self, mock_ai):
-        """Test empty message classification."""
-        result = mock_ai.classifier.classify("")
-        
-        assert result["intent"] == "unknown"
-        assert result["confidence"] == 0.0
-
-    def test_consistent_classification(self, mock_ai):
-        """Test that same message gets same classification."""
-        message = "I cannot login to my account"
-        
-        result1 = mock_ai.classifier.classify(message)
-        result2 = mock_ai.classifier(message)
-        
-        assert result1 == result2
-
-    def test_classification_confidence_override(self, mock_ai):
-        """Test overriding confidence for testing."""
-        mock_ai.classifier.set_confidence("login_issue", 0.95)
-        
-        result = mock_ai.classifier.classify("login problem")
-        
-        assert result["confidence"] == 0.95
-
-
-class TestThresholdBehavior:
-    """Test behavior at and around confidence thresholds."""
-
-    def test_exactly_at_threshold(self, mock_ai):
-        """Test behavior exactly at threshold (0.75)."""
-        mock_ai.decision_engine.set_threshold(0.75)
-        
-        # Exactly at threshold should auto-resolve
-        decision = mock_ai.decision_engine.decide(0.75)
-        assert decision == "AUTO_RESOLVE"
-        
-        # Just below should escalate
-        decision = mock_ai.decision_engine.decide(0.749)
-        assert decision == "ESCALATE"
-        
-        # Just above should auto-resolve
-        decision = mock_ai.decision_engine.decide(0.751)
-        assert decision == "AUTO_RESOLVE"
-
-    def test_threshold_configuration(self, mock_ai):
-        """Test different threshold configurations."""
-        thresholds = [0.5, 0.8, 0.9]
-        
-        for threshold in thresholds:
-            mock_ai.decision_engine.set_threshold(threshold)
-            
-            # Test below threshold
-            decision = mock_ai.decision_engine.decide(threshold - 0.1)
-            assert decision == "ESCALATE"
-            
-            # Test at threshold
-            decision = mock_ai.decision_engine.decide(threshold)
-            assert decision == "AUTO_RESOLVE"
-            
-            # Test above threshold
-            decision = mock_ai.decision_engine.decide(threshold + 0.1)
-            assert decision == "AUTO_RESOLVE"
-
-    def test_invalid_confidence_values(self, mock_ai):
-        """Test handling of invalid confidence values."""
-        invalid_values = [
-            None, "invalid", [], {}, True, False,
-            -0.1, 1.1, float('inf'), float('-inf'), float('nan')
+        # Test login issues - should return high confidence
+        login_messages = [
+            "I cannot login to my account",
+            "login credentials not working",
+            "forgot my password and can't login",
+            "login page says invalid credentials"
         ]
         
-        for invalid_value in invalid_values:
-            decision = mock_ai.decision_engine.decide(invalid_value)
-            assert decision == "ESCALATE"  # Safety first
+        for message in login_messages:
+            result = classify_intent(message)
+            assert result["intent"] == "login_issue"
+            assert result["confidence"] >= 0.8, f"Expected confidence >= 0.8 for '{message}', got {result['confidence']}"
+            assert isinstance(result["confidence"], float)
+            assert 0.0 <= result["confidence"] <= 1.0
 
-    @patch('app.api.tickets.classify_intent')
-    def test_threshold_with_real_api(self, mock_classify, client, db_session):
-        """Test threshold behavior with real API."""
-        # Mock classifier to return exact threshold
-        mock_classify.return_value = {"intent": "login_issue", "confidence": 0.75}
+        # Test payment issues - should return high confidence
+        payment_messages = [
+            "I was charged twice for my order",
+            "payment method declined",
+            "billing question about invoice",
+            "refund not processed yet"
+        ]
         
-        response = client.post("/tickets/", json={"message": "Test at threshold"})
-        
-        assert response.status_code == 201
-        ticket_data = response.json()
-        assert ticket_data["status"] == "auto_resolved"
-        assert ticket_data["confidence"] == 0.75
+        for message in payment_messages:
+            result = classify_intent(message)
+            assert result["intent"] == "payment_issue"
+            assert result["confidence"] >= 0.8, f"Expected confidence >= 0.8 for '{message}', got {result['confidence']}"
 
-
-class TestSimilaritySearch:
-    """Test similarity search with deterministic results."""
-
-    def test_exact_match(self, mock_ai):
-        """Test finding exact match."""
-        mock_ai.similarity_search.add_ticket("I cannot login", "Reset password")
+        # Test unknown messages - should return low confidence
+        unknown_messages = [
+            "xyz123 random text",
+            "the weather is nice today",
+            ""
+        ]
         
-        result = mock_ai.similarity_search.find_similar("I cannot login", 0.8)
+        for message in unknown_messages:
+            result = classify_intent(message)
+            assert result["intent"] == "unknown"
+            assert result["confidence"] <= 0.3, f"Expected confidence <= 0.3 for '{message}', got {result['confidence']}"
+
+        # Test general query messages - should return general_query with high confidence
+        general_query_messages = [
+            "what time is it",
+            "how are you"
+        ]
         
+        for message in general_query_messages:
+            result = classify_intent(message)
+            assert result["intent"] == "general_query"
+            assert result["confidence"] >= 0.7, f"Expected confidence >= 0.7 for '{message}', got {result['confidence']}"
+
+    def test_real_similarity_search(self):
+        """Test real similarity search with realistic inputs."""
+        from app.services.similarity_search import find_similar_ticket
+        
+        # Add some realistic tickets
+        resolved_tickets = [
+            {"message": "Cannot login to account", "response": "Reset password using forgot password link"},
+            {"message": "Payment was declined", "response": "Check payment method and try again"},
+            {"message": "Need help with billing", "response": "Contact billing support"}
+        ]
+        
+        # Test exact match
+        result = find_similar_ticket("Cannot login to account", resolved_tickets, 0.8)
         assert result is not None
         assert result["similarity_score"] >= 0.8
-        assert result["ticket"]["response"] == "Reset password"
-
-    def test_no_match_below_threshold(self, mock_ai):
-        """Test no match when below threshold."""
-        mock_ai.similarity_search.add_ticket("Payment issue", "Check billing")
+        assert result["matched_text"] == "Cannot login to account"
+        assert result["ticket"]["response"] == "Reset password using forgot password link"
         
-        result = mock_ai.similarity_search.find_similar("Login problem", 0.9)
-        
-        assert result is None
-
-    def test_partial_match(self, mock_ai):
-        """Test partial match with moderate similarity."""
-        mock_ai.similarity_search.add_ticket("Login problem help", "Reset password")  # Different message
-        
-        result = mock_ai.similarity_search.find_similar("Login issue", 0.2)  # Lower threshold
-        
+        # Test partial match
+        result = find_similar_ticket("login problem", resolved_tickets, 0.2)
         assert result is not None
         assert result["similarity_score"] >= 0.2
-        assert result["similarity_score"] < 1.0
-        assert result["ticket"]["response"] == "Reset password"
-
-    def test_empty_database(self, mock_ai):
-        """Test similarity search with empty database."""
-        result = mock_ai.similarity_search.find_similar("Any message", 0.5)
+        assert "Cannot login to account" in result["matched_text"]
+        assert result["ticket"]["response"] == "Reset password using forgot password link"
         
+        # Test no match
+        result = find_similar_ticket("completely different topic", resolved_tickets, 0.8)
         assert result is None
-
-    def test_multiple_tickets_best_match(self, mock_ai):
-        """Test selecting best match from multiple tickets."""
-        mock_ai.similarity_search.clear()  # Clear pre-populated data
-        mock_ai.similarity_search.add_ticket("Login help needed", "Help with login")  # Different message
-        mock_ai.similarity_search.add_ticket("Cannot login to my account", "Reset password")  # Different message
-        mock_ai.similarity_search.add_ticket("Password reset issue", "Check password")  # Different message
         
-        result = mock_ai.similarity_search.find_similar("Cannot login", 0.2)
-        
+        # Test threshold behavior
+        result = find_similar_ticket("payment issue", resolved_tickets, 0.3)
         assert result is not None
-        # Should find the most similar match - "Cannot login to my account" has highest similarity (0.4)
-        assert result["ticket"]["response"] == "Reset password"
+        assert result["similarity_score"] >= 0.3
+        assert "Payment was declined" in result["matched_text"]
+        assert result["ticket"]["response"] == "Check payment method and try again"
 
-
-class TestResponseGeneration:
-    """Test response generation with templates."""
-
-    def test_response_with_similar_solution(self, mock_ai):
-        """Test response generation with similar solution."""
-        response = mock_ai.response_generator.generate(
+    def test_real_response_generation(self):
+        """Test real response generation with realistic inputs."""
+        from app.services.response_generator import generate_response
+        
+        # Test response with similar solution
+        response = generate_response(
             intent="login_issue",
-            original_message="Cannot login",
-            similar_solution="Reset your password"
+            original_message="Cannot login to my account",
+            similar_solution="Reset password using forgot password link"
         )
         
-        assert "Reset your password" in response
-        assert "similar case" in response.lower()
-
-    def test_response_without_similar_solution(self, mock_ai):
-        """Test response generation without similar solution."""
-        response = mock_ai.response_generator.generate(
-            intent="login_issue",
-            original_message="Cannot login",
-            similar_solution=None
-        )
-        
+        assert response is not None
         assert isinstance(response, str)
-        assert len(response) > 10
-        assert "logging" in response.lower()  # Template contains "logging", not "login"
-
-    def test_response_all_intents(self, mock_ai):
-        """Test response generation for all intents."""
-        intents = [
-            "login_issue", "payment_issue", "account_issue",
-            "technical_issue", "feature_request", "general_query", "unknown"
-        ]
+        assert len(response) > 0
+        assert "Reset password" in response
+        assert "similar case" in response.lower()
         
-        for intent in intents:
-            response = mock_ai.response_generator.generate(
-                intent=intent,
-                original_message=f"Test {intent}",
-                similar_solution=None
-            )
-            
-            assert isinstance(response, str)
-            assert len(response) > 10
-
-    def test_response_consistency(self, mock_ai):
-        """Test response generation consistency."""
-        # Generate same response multiple times
-        response1 = mock_ai.response_generator.generate(
+        # Test response without similar solution
+        response = generate_response(
             intent="login_issue",
-            original_message="Cannot login",
-            similar_solution=None
-        )
-        response2 = mock_ai.response_generator.generate(
-            intent="login_issue",
-            original_message="Cannot login",
+            original_message="Cannot login to my account",
             similar_solution=None
         )
         
-        assert response1 == response2
+        assert response is not None
+        assert isinstance(response, str)
+        assert len(response) > 0
+        
+        # Test response for unknown intent
+        response = generate_response(
+            intent="unknown",
+            original_message="random message",
+            similar_solution=None
+        )
+        
+        assert response is not None
+        assert isinstance(response, str)
+        assert len(response) > 0
+
+    def test_real_decision_engine(self):
+        """Test real decision engine with realistic confidence values."""
+        from app.services.decision_engine import decide_resolution
+        
+        # Test high confidence - should auto-resolve
+        decision = decide_resolution(0.9)
+        assert decision == "AUTO_RESOLVE"
+        
+        # Test exactly at threshold - should auto-resolve
+        decision = decide_resolution(0.75)
+        assert decision == "AUTO_RESOLVE"
+        
+        # Test below threshold - should escalate
+        decision = decide_resolution(0.7)
+        assert decision == "ESCALATE"
+        
+        # Test very low confidence - should escalate
+        decision = decide_resolution(0.1)
+        assert decision == "ESCALATE"
+        
+        # Test invalid values - should escalate (safety first)
+        invalid_values = [None, "invalid", [], {}, True, False, -0.1, 1.1, float('inf'), float('-inf'), float('nan')]
+        for invalid_value in invalid_values:
+            decision = decide_resolution(invalid_value)
+            assert decision == "ESCALATE"
 
 
 class TestEndToEndScenarios:
@@ -351,38 +279,10 @@ class TestEndToEndScenarios:
         assert ticket_data["confidence"] == 0.2
         assert ticket_data["response"] is None
 
-    def test_scenario_based_testing(self, mock_ai):
-        """Test predefined scenarios."""
-        scenarios = ["login", "payment", "low_confidence", "threshold"]
-        
-        for scenario_name in scenarios:
-            scenario = mock_ai.setup_scenario(scenario_name)
-            assert scenario is not None
-            
-            # Process ticket through mock pipeline
-            result = mock_ai.process_ticket(scenario["message"])
-            
-            # Verify expected results
-            assert result["intent"] == scenario["expected_intent"]
-            assert result["confidence"] == scenario["expected_confidence"]
-            assert result["decision"] == scenario["expected_decision"]
-
-
 class TestEdgeCases:
     """Test edge cases and boundary conditions."""
 
-    def test_edge_cases_scenarios(self, mock_ai):
-        """Test all edge case scenarios."""
-        edge_cases = TestScenarios.edge_cases()
-        
-        for case in edge_cases:
-            result = mock_ai.process_ticket(case["message"])
-            
-            assert result["intent"] == case["expected_intent"]
-            assert result["confidence"] == case["expected_confidence"]
-            assert result["decision"] == case["expected_decision"]
-
-    @patch('app.services.classifier.classify_intent')
+    @patch('app.api.tickets.classify_intent')
     def test_very_long_message(self, mock_classify, client, db_session):
         """Test handling of very long messages."""
         mock_classify.return_value = {"intent": "unknown", "confidence": 0.3}
@@ -394,7 +294,7 @@ class TestEdgeCases:
         ticket_data = response.json()
         assert ticket_data["message"] == long_message
 
-    @patch('app.services.classifier.classify_intent')
+    @patch('app.api.tickets.classify_intent')
     def test_special_characters(self, mock_classify, client, db_session):
         """Test handling of special characters and unicode."""
         mock_classify.return_value = {"intent": "login_issue", "confidence": 0.85}
@@ -406,7 +306,7 @@ class TestEdgeCases:
         ticket_data = response.json()
         assert ticket_data["message"] == special_message
 
-    @patch('app.services.classifier.classify_intent')
+    @patch('app.api.tickets.classify_intent')
     def test_concurrent_processing(self, mock_classify, client, db_session):
         """Test concurrent ticket processing."""
         mock_classify.return_value = {"intent": "login_issue", "confidence": 0.8}
@@ -440,7 +340,7 @@ class TestEdgeCases:
 class TestPerformanceAndReliability:
     """Test performance and reliability characteristics."""
 
-    @patch('app.services.classifier.classify_intent')
+    @patch('app.api.tickets.classify_intent')
     def test_processing_performance(self, mock_classify, client, db_session):
         """Test processing performance meets requirements."""
         mock_classify.return_value = {"intent": "login_issue", "confidence": 0.8}
@@ -455,48 +355,6 @@ class TestPerformanceAndReliability:
         # Should complete within reasonable time
         assert processing_time < 3.0
         assert response.status_code == 201
-
-    def test_mock_performance(self, mock_ai):
-        """Test mock service performance."""
-        # Test classification performance
-        start_time = time.time()
-        for i in range(100):
-            mock_ai.classifier.classify(f"Test message {i}")
-        classification_time = time.time() - start_time
-        
-        # Should be very fast for mocks
-        assert classification_time < 1.0
-        
-        # Test similarity search performance
-        mock_ai.similarity_search.add_ticket("Test ticket", "Test response")
-        
-        start_time = time.time()
-        for i in range(100):
-            mock_ai.similarity_search.find_similar(f"Query {i}")
-        similarity_time = time.time() - start_time
-        
-        assert similarity_time < 1.0
-
-    def test_memory_usage(self, mock_ai):
-        """Test memory usage doesn't grow excessively."""
-        import gc
-        import sys
-        
-        # Get initial memory usage
-        gc.collect()
-        initial_objects = len(gc.get_objects())
-        
-        # Process many tickets
-        for i in range(1000):
-            mock_ai.process_ticket(f"Test message {i}")
-        
-        # Check memory usage
-        gc.collect()
-        final_objects = len(gc.get_objects())
-        
-        # Memory growth should be reasonable
-        object_growth = final_objects - initial_objects
-        assert object_growth < 10000  # Arbitrary reasonable limit
 
     @patch('app.api.tickets.classify_intent')
     def test_error_recovery(self, mock_classify, client, db_session):
@@ -528,21 +386,6 @@ class TestPerformanceAndReliability:
 class TestSystemIntegration:
     """Test system integration with real components."""
 
-    def test_mock_ai_service_integration(self, mock_ai):
-        """Test mock AI service integration."""
-        # Setup login scenario
-        scenario = mock_ai.setup_scenario("login")
-        
-        # Process ticket
-        result = mock_ai.process_ticket(scenario["message"])
-        
-        # Verify complete flow
-        assert result["intent"] == "login_issue"
-        assert result["confidence"] == 0.85
-        assert result["decision"] == "AUTO_RESOLVE"
-        assert result["response"] is not None
-        assert "password" in result["response"].lower()
-
     def test_database_integration(self, client, db_session):
         """Test database integration with mocked AI."""
         with patch('app.api.tickets.classify_intent') as mock_classify, \
@@ -571,7 +414,7 @@ class TestSystemIntegration:
 
     def test_api_endpoints_integration(self, client, db_session):
         """Test API endpoints integration."""
-        with patch('app.services.classifier.classify_intent') as mock_classify:
+        with patch('app.api.tickets.classify_intent') as mock_classify:
             mock_classify.return_value = {"intent": "login_issue", "confidence": 0.8}
             
             # Create ticket
@@ -607,19 +450,6 @@ class TestConfiguration:
         assert service.similarity_search is not None
         assert service.response_generator is not None
         assert service.decision_engine is not None
-
-    def test_test_data_setup(self):
-        """Test test data setup."""
-        service = setup_test_data()
-        
-        # Should have common tickets in similarity search
-        assert len(service.similarity_search.tickets_db) > 0
-        
-        # Should be able to process tickets
-        result = service.process_ticket("Test message")
-        assert "intent" in result
-        assert "confidence" in result
-        assert "decision" in result
 
     def test_scenario_setup(self):
         """Test scenario setup."""

@@ -380,21 +380,31 @@ class TestPerformanceAndReliability:
         assert response.status_code == 201
 
 
-class TestAPIValidation:
-    """Integration tests for API validation and error handling."""
+class TestClientValidation:
+    """Pure client validation tests that don't require database setup."""
+
+    def test_invalid_ticket_id(self, client):
+        """Test retrieving ticket with invalid ID - pure validation."""
+        response = client.get("/tickets/invalid")
+        
+        assert response.status_code == 400
+        error_data = response.json()
+        assert "error" in error_data
+        assert error_data["error"]["code"] == "VALIDATION_ERROR"
+        assert "validation" in error_data["error"]["message"].lower()
+        assert "validation_errors" in error_data["error"]["details"]
 
     def test_create_ticket_missing_message(self, client):
-        """Test creating ticket without message."""
+        """Test creating ticket without message - pure validation."""
         response = client.post("/tickets/", json={})
         
-        assert response.status_code == 400  # Validation error for missing required field
-        
-        body = response.json()
-        # Accept either FastAPI default or custom error envelope
-        assert "detail" in body or "error" in body
+        assert response.status_code == 400
+        error_data = response.json()
+        assert "error" in error_data
+        assert error_data["error"]["code"] == "VALIDATION_ERROR"
 
     def test_create_ticket_invalid_json(self, client):
-        """Test creating ticket with invalid JSON."""
+        """Test creating ticket with invalid JSON - pure validation."""
         response = client.post(
             "/tickets/",
             data="invalid json",
@@ -403,33 +413,38 @@ class TestAPIValidation:
         
         assert response.status_code in [400, 422]  # Accept both validation and JSON errors
 
-    def test_get_nonexistent_ticket(self, client):
-        """Test retrieving non-existent ticket."""
+
+class TestAPIValidation:
+    """API tests that require database setup for proper validation."""
+
+    def test_get_nonexistent_ticket(self, client, db_session):
+        """Test retrieving non-existent ticket with database setup."""
         response = client.get("/tickets/99999")
         
-        assert response.status_code in [404, 500]  # Widen until app is fixed
+        assert response.status_code == 404
+        error_data = response.json()
+        assert "error" in error_data
+        assert error_data["error"]["code"] == "NOT_FOUND"
+        assert "not found" in error_data["error"]["message"].lower()
 
-    def test_invalid_ticket_id(self, client):
-        """Test retrieving ticket with invalid ID."""
-        response = client.get("/tickets/invalid")
-        
-        assert response.status_code in [400, 422]
-
-    def test_list_tickets_invalid_status(self, client):
-        """Test listing tickets with invalid status filter."""
+    def test_list_tickets_invalid_status(self, client, db_session):
+        """Test listing tickets with invalid status filter with database setup."""
         response = client.get("/tickets/?status=invalid_status")
         
-        assert response.status_code in [400, 422, 500]
+        assert response.status_code == 200
+        data = response.json()
+        assert "tickets" in data
+        assert data["tickets"] == []  # Invalid status returns empty list
 
-    def test_create_ticket_message_too_long(self, client):
+    def test_create_ticket_message_too_long(self, client, db_session):
         """Test creating ticket with extremely long message."""
         # Test with message longer than typical limits
         long_message = "x" * 1000000  # 1MB message
         
         response = client.post("/tickets/", json={"message": long_message})
         
-        # Should either succeed or fail gracefully
-        assert response.status_code in [201, 400, 413, 422, 500]  # Include 500 for server errors
+        # Should either succeed or fail gracefully with validation error
+        assert response.status_code in [201, 400, 413, 422]  # Removed 500 - server should handle gracefully
 
 
 class TestFeedbackIntegration:

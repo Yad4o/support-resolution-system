@@ -28,17 +28,17 @@ import time
 from pathlib import Path
 
 
-def run_command(cmd, description):
+def run_command(cmd_parts, description):
     """Run a command and handle the result."""
     print(f"\n{'='*60}")
     print(f"Running: {description}")
-    print(f"Command: {cmd}")
+    print(f"Command: {' '.join(cmd_parts)}")
     print('='*60)
     
     start_time = time.time()
     
     try:
-        result = subprocess.run(cmd, shell=True, check=True, capture_output=False)
+        result = subprocess.run(cmd_parts, check=True, capture_output=False)
         end_time = time.time()
         
         print(f"\n✅ {description} completed successfully!")
@@ -75,7 +75,7 @@ def main():
     # Test filtering options
     parser.add_argument('--file', type=str, help='Run specific test file')
     parser.add_argument('--function', type=str, help='Run specific test function')
-    parser.add_argument('--class', type=str, help='Run specific test class')
+    parser.add_argument('--class', type=str, dest='test_class', help='Run specific test class')
     
     args = parser.parse_args()
     
@@ -91,8 +91,8 @@ def main():
         cmd_parts.append(args.file)
     elif args.function:
         cmd_parts.extend(["-k", args.function])
-    elif args.class:
-        cmd_parts.extend(["-k", args.class])
+    elif args.test_class:
+        cmd_parts.extend(["-k", args.test_class])
     
     # Add category markers
     markers = []
@@ -131,12 +131,11 @@ def main():
         cmd_parts.extend(["-m", "not slow"])
     
     # Default to all tests if no specific category selected
-    if not any([args.unit, args.integration, args.api, args.ai, args.mock, args.edge, args.performance, args.file, args.function, args.class]):
+    if not any([args.unit, args.integration, args.api, args.ai, args.mock, args.edge, args.performance, args.file, args.function, args.test_class]):
         print("🚀 Running all tests...")
     
     # Run the tests
-    cmd = " ".join(cmd_parts)
-    success = run_command(cmd, "Test Suite")
+    success = run_command(cmd_parts, "Test Suite")
     
     if success:
         print("\n🎉 All tests passed!")
