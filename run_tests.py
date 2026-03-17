@@ -84,7 +84,7 @@ def main():
     os.chdir(project_root)
     
     # Build pytest command
-    cmd_parts = ["python", "-m", "pytest"]
+    cmd_parts = [sys.executable, "-m", "pytest"]
     
     # Add test file/function/class filters
     if args.file:
