@@ -68,13 +68,6 @@ def db_session(comprehensive_engine):
         Base.metadata.drop_all(bind=comprehensive_engine)
 
 
-def override_get_db():
-    """Override database dependency for testing."""
-    try:
-        db = TestingSessionLocal()
-        yield db
-    finally:
-        db.close()
 
 
 @pytest.fixture(scope="function")
