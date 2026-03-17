@@ -52,10 +52,6 @@ from sqlalchemy.orm import Session
 from app.db.session import SessionLocal, init_db
 from app.models.ticket import Ticket
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
 logger = logging.getLogger(__name__)
 
 # Ticket statuses that are safe to archive
@@ -64,11 +60,13 @@ ARCHIVABLE_STATUSES = {"closed", "auto_resolved", "escalated"}
 
 def archive_old_tickets(db: Session, cutoff_date: datetime, dry_run: bool = False) -> int:
     """
-    Mark old resolved/closed tickets as 'archived'.
+    Mark old resolved/closed tickets as archived via the ``is_archived`` flag.
 
     Only tickets whose ``status`` is one of :data:`ARCHIVABLE_STATUSES` **and**
     whose ``created_at`` is older than *cutoff_date* are affected.  Active
-    (``open``) tickets are never touched.
+    (``open``) tickets are never touched.  The original ``status`` value is
+    preserved so that metrics and similarity-search queries continue to work
+    correctly after archival.
 
     Args:
         db: Active SQLAlchemy session.
@@ -82,6 +80,7 @@ def archive_old_tickets(db: Session, cutoff_date: datetime, dry_run: bool = Fals
         db.query(Ticket)
         .filter(
             Ticket.status.in_(ARCHIVABLE_STATUSES),
+            Ticket.is_archived.is_(False),  # skip already-archived tickets (idempotency)
             Ticket.created_at < cutoff_date,
         )
         .all()
@@ -105,7 +104,7 @@ def archive_old_tickets(db: Session, cutoff_date: datetime, dry_run: bool = Fals
         return count
 
     for ticket in tickets:
-        ticket.status = "archived"
+        ticket.is_archived = True
 
     db.commit()
     logger.info("Archived %d ticket(s).", count)
@@ -213,5 +212,9 @@ def _parse_args(argv=None):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
     args = _parse_args()
     run_cleanup(days=args.days, dry_run=args.dry_run)

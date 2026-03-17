@@ -294,14 +294,23 @@ class TestFetchFeedbackWithTickets:
 
 class TestRunFeedbackAnalyzer:
 
-    def test_returns_dict(self, monkeypatch, tmp_path, temp_db_path):
-        monkeypatch.setenv("DATABASE_URL", f"sqlite:///{temp_db_path}")
-        monkeypatch.setenv("SECRET_KEY", "test-secret")
+    @pytest.fixture()
+    def isolated_session_factory(self, temp_db_path):
+        """Return a (engine, SessionLocal) pair pointing at the temp DB."""
+        url = f"sqlite:///{temp_db_path}"
+        engine = create_engine(url, connect_args={"check_same_thread": False})
+        Session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        from app.models import feedback, ticket, user  # noqa: F401
+        Base.metadata.create_all(bind=engine)
+        yield engine, Session
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
 
-        import importlib
-        import app.core.config as cfg_mod
-        cfg_mod.get_settings.cache_clear()
-        importlib.reload(cfg_mod)
+    def test_returns_dict(self, monkeypatch, tmp_path, isolated_session_factory):
+        _engine, TestSession = isolated_session_factory
+        import workers.feedback_analyzer as wfa
+        monkeypatch.setattr(wfa, "SessionLocal", TestSession)
+        monkeypatch.setattr(wfa, "init_db", lambda: None)
 
         out = tmp_path / "fa.json"
         result = run_feedback_analyzer(output_path=out)
@@ -310,16 +319,11 @@ class TestRunFeedbackAnalyzer:
         assert "total_feedback" in result
         assert out.exists()
 
-        cfg_mod.get_settings.cache_clear()
-
-    def test_output_file_is_valid_json(self, monkeypatch, tmp_path, temp_db_path):
-        monkeypatch.setenv("DATABASE_URL", f"sqlite:///{temp_db_path}")
-        monkeypatch.setenv("SECRET_KEY", "test-secret")
-
-        import importlib
-        import app.core.config as cfg_mod
-        cfg_mod.get_settings.cache_clear()
-        importlib.reload(cfg_mod)
+    def test_output_file_is_valid_json(self, monkeypatch, tmp_path, isolated_session_factory):
+        _engine, TestSession = isolated_session_factory
+        import workers.feedback_analyzer as wfa
+        monkeypatch.setattr(wfa, "SessionLocal", TestSession)
+        monkeypatch.setattr(wfa, "init_db", lambda: None)
 
         out = tmp_path / "fa.json"
         run_feedback_analyzer(output_path=out)
@@ -327,23 +331,16 @@ class TestRunFeedbackAnalyzer:
         loaded = json.loads(out.read_text())
         assert "total_feedback" in loaded
 
-        cfg_mod.get_settings.cache_clear()
-
-    def test_empty_db_returns_zeros(self, monkeypatch, tmp_path, temp_db_path):
-        monkeypatch.setenv("DATABASE_URL", f"sqlite:///{temp_db_path}")
-        monkeypatch.setenv("SECRET_KEY", "test-secret")
-
-        import importlib
-        import app.core.config as cfg_mod
-        cfg_mod.get_settings.cache_clear()
-        importlib.reload(cfg_mod)
+    def test_empty_db_returns_zeros(self, monkeypatch, tmp_path, isolated_session_factory):
+        _engine, TestSession = isolated_session_factory
+        import workers.feedback_analyzer as wfa
+        monkeypatch.setattr(wfa, "SessionLocal", TestSession)
+        monkeypatch.setattr(wfa, "init_db", lambda: None)
 
         result = run_feedback_analyzer(output_path=tmp_path / "fa.json")
 
         assert result["total_feedback"] == 0
         assert result["average_rating"] == 0.0
-
-        cfg_mod.get_settings.cache_clear()
 
 
 # ---------------------------------------------------------------------------

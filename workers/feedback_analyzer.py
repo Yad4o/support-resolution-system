@@ -53,10 +53,6 @@ from app.db.session import SessionLocal, init_db
 from app.models.feedback import Feedback
 from app.models.ticket import Ticket
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
 logger = logging.getLogger(__name__)
 
 DEFAULT_OUTPUT = project_root / "feedback_analysis.json"
@@ -245,5 +241,9 @@ def _parse_args(argv=None):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
     args = _parse_args()
     run_feedback_analyzer(output_path=args.output)

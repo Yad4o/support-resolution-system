@@ -312,14 +312,23 @@ class TestSaveEmbeddings:
 
 class TestRunEmbeddingBuilder:
 
-    def test_returns_dict(self, monkeypatch, tmp_path, temp_db_path):
-        monkeypatch.setenv("DATABASE_URL", f"sqlite:///{temp_db_path}")
-        monkeypatch.setenv("SECRET_KEY", "test-secret")
+    @pytest.fixture()
+    def isolated_session_factory(self, temp_db_path):
+        """Return a (engine, SessionLocal) pair pointing at the temp DB."""
+        url = f"sqlite:///{temp_db_path}"
+        engine = create_engine(url, connect_args={"check_same_thread": False})
+        Session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        from app.models import feedback, ticket, user  # noqa: F401
+        Base.metadata.create_all(bind=engine)
+        yield engine, Session
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
 
-        import importlib
-        import app.core.config as cfg_mod
-        cfg_mod.get_settings.cache_clear()
-        importlib.reload(cfg_mod)
+    def test_returns_dict(self, monkeypatch, tmp_path, isolated_session_factory):
+        _engine, TestSession = isolated_session_factory
+        import workers.embedding_builder as wb
+        monkeypatch.setattr(wb, "SessionLocal", TestSession)
+        monkeypatch.setattr(wb, "init_db", lambda: None)
 
         out = tmp_path / "emb.json"
         result = run_embedding_builder(output_path=out)
@@ -328,24 +337,17 @@ class TestRunEmbeddingBuilder:
         assert "ticket_count" in result
         assert out.exists()
 
-        cfg_mod.get_settings.cache_clear()
-
-    def test_empty_db_produces_empty_cache(self, monkeypatch, tmp_path, temp_db_path):
-        monkeypatch.setenv("DATABASE_URL", f"sqlite:///{temp_db_path}")
-        monkeypatch.setenv("SECRET_KEY", "test-secret")
-
-        import importlib
-        import app.core.config as cfg_mod
-        cfg_mod.get_settings.cache_clear()
-        importlib.reload(cfg_mod)
+    def test_empty_db_produces_empty_cache(self, monkeypatch, tmp_path, isolated_session_factory):
+        _engine, TestSession = isolated_session_factory
+        import workers.embedding_builder as wb
+        monkeypatch.setattr(wb, "SessionLocal", TestSession)
+        monkeypatch.setattr(wb, "init_db", lambda: None)
 
         out = tmp_path / "emb.json"
         result = run_embedding_builder(output_path=out)
 
         assert result["ticket_count"] == 0
         assert result["vectors"] == []
-
-        cfg_mod.get_settings.cache_clear()
 
 
 # ---------------------------------------------------------------------------

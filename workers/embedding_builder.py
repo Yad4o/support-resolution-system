@@ -54,10 +54,6 @@ sys.path.insert(0, str(project_root))
 from app.db.session import SessionLocal, init_db
 from app.models.ticket import Ticket
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
 logger = logging.getLogger(__name__)
 
 # Statuses considered "resolved" and therefore useful for embedding pre-computation
@@ -217,5 +213,9 @@ def _parse_args(argv=None):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
     args = _parse_args()
     run_embedding_builder(output_path=args.output)

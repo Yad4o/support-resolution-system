@@ -55,10 +55,6 @@ from app.db.session import SessionLocal, init_db
 from app.models.feedback import Feedback
 from app.models.ticket import Ticket
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
 logger = logging.getLogger(__name__)
 
 DEFAULT_OUTPUT = project_root / "metrics.json"
@@ -108,11 +104,15 @@ def collect_metrics(db) -> Dict:
     )
     tickets_by_intent = {intent: count for intent, count in intent_rows}
 
-    # Resolved / escalated ticket counts
+    # Resolved / escalated ticket counts.
+    # "Decided" = all tickets that have left the open state.
+    # Using total - open ensures archived tickets (is_archived=True) are
+    # counted correctly since archiving preserves the original status.
+    open_count = tickets_by_status.get("open", 0)
+    decided = total_tickets - open_count  # tickets that left open state
+
     auto_resolved = tickets_by_status.get("auto_resolved", 0)
     escalated = tickets_by_status.get("escalated", 0)
-    closed = tickets_by_status.get("closed", 0)
-    decided = auto_resolved + escalated + closed  # tickets that left open state
 
     auto_resolve_rate = round(auto_resolved / decided, 3) if decided else 0.0
     escalation_rate = round(escalated / decided, 3) if decided else 0.0
@@ -204,5 +204,9 @@ def _parse_args(argv=None):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
     args = _parse_args()
     run_metrics_collector(output_path=args.output)

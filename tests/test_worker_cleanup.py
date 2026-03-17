@@ -96,7 +96,7 @@ def _make_feedback(db, ticket_id: int, rating: int = 4, resolved: bool = True) -
 class TestArchiveOldTickets:
 
     def test_archives_eligible_ticket(self, db_session):
-        """Tickets with archivable status and old enough should be archived."""
+        """Tickets with archivable status and old enough should be marked is_archived=True."""
         ticket = _make_ticket(db_session, status="closed", age_days=100)
         cutoff = datetime.now(timezone.utc) - timedelta(days=90)
 
@@ -104,7 +104,8 @@ class TestArchiveOldTickets:
 
         assert count == 1
         db_session.refresh(ticket)
-        assert ticket.status == "archived"
+        assert ticket.is_archived is True
+        assert ticket.status == "closed"  # original status preserved
 
     def test_skips_open_tickets(self, db_session):
         """Open tickets must never be archived."""
@@ -124,6 +125,7 @@ class TestArchiveOldTickets:
 
         assert count == 0
         db_session.refresh(ticket)
+        assert ticket.is_archived is False
         assert ticket.status == "closed"
 
     def test_archives_all_archivable_statuses(self, db_session):
@@ -135,6 +137,10 @@ class TestArchiveOldTickets:
         count = archive_old_tickets(db_session, cutoff)
 
         assert count == len(ARCHIVABLE_STATUSES)
+        # All archived tickets should still have their original status
+        for status in ARCHIVABLE_STATUSES:
+            t = db_session.query(Ticket).filter_by(status=status).one()
+            assert t.is_archived is True
 
     def test_dry_run_does_not_write(self, db_session):
         """Dry-run mode should return the count but not change the DB."""
@@ -145,7 +151,8 @@ class TestArchiveOldTickets:
 
         assert count == 1
         db_session.refresh(ticket)
-        assert ticket.status == "closed"  # unchanged
+        assert ticket.is_archived is False  # unchanged
+        assert ticket.status == "closed"    # unchanged
 
     def test_returns_zero_when_nothing_to_archive(self, db_session):
         """Returns 0 when there are no eligible tickets."""
@@ -174,6 +181,8 @@ class TestArchiveOldTickets:
         count = archive_old_tickets(db_session, cutoff)
 
         assert count == 5
+        for t in db_session.query(Ticket).filter_by(status="auto_resolved").all():
+            assert t.is_archived is True
 
 
 # ---------------------------------------------------------------------------
@@ -239,16 +248,24 @@ class TestRemoveOrphanedFeedback:
 
 class TestRunCleanup:
 
-    def test_returns_summary_dict(self, monkeypatch, temp_db_path):
-        """run_cleanup should return a dict with the expected keys."""
-        monkeypatch.setenv("DATABASE_URL", f"sqlite:///{temp_db_path}")
-        monkeypatch.setenv("SECRET_KEY", "test-secret")
+    @pytest.fixture()
+    def isolated_session_factory(self, temp_db_path):
+        """Return a (engine, SessionLocal) pair pointing at the temp DB."""
+        url = f"sqlite:///{temp_db_path}"
+        engine = create_engine(url, connect_args={"check_same_thread": False})
+        Session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        from app.models import feedback, ticket, user  # noqa: F401
+        Base.metadata.create_all(bind=engine)
+        yield engine, Session
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
 
-        # Reload settings so the patched env vars take effect
-        import importlib
-        import app.core.config as cfg_mod
-        cfg_mod.get_settings.cache_clear()
-        importlib.reload(cfg_mod)
+    def test_returns_summary_dict(self, monkeypatch, isolated_session_factory):
+        """run_cleanup should return a dict with the expected keys."""
+        _engine, TestSession = isolated_session_factory
+        import workers.cleanup as wc
+        monkeypatch.setattr(wc, "SessionLocal", TestSession)
+        monkeypatch.setattr(wc, "init_db", lambda: None)
 
         result = run_cleanup(days=90, dry_run=True)
 
@@ -256,25 +273,17 @@ class TestRunCleanup:
         assert "archived_tickets" in result
         assert "removed_feedback" in result
 
-        # Restore
-        cfg_mod.get_settings.cache_clear()
-
-    def test_empty_db_returns_zeros(self, monkeypatch, temp_db_path):
+    def test_empty_db_returns_zeros(self, monkeypatch, isolated_session_factory):
         """On an empty database both counters should be zero."""
-        monkeypatch.setenv("DATABASE_URL", f"sqlite:///{temp_db_path}")
-        monkeypatch.setenv("SECRET_KEY", "test-secret")
-
-        import importlib
-        import app.core.config as cfg_mod
-        cfg_mod.get_settings.cache_clear()
-        importlib.reload(cfg_mod)
+        _engine, TestSession = isolated_session_factory
+        import workers.cleanup as wc
+        monkeypatch.setattr(wc, "SessionLocal", TestSession)
+        monkeypatch.setattr(wc, "init_db", lambda: None)
 
         result = run_cleanup(days=90, dry_run=False)
 
         assert result["archived_tickets"] == 0
         assert result["removed_feedback"] == 0
-
-        cfg_mod.get_settings.cache_clear()
 
 
 # ---------------------------------------------------------------------------
