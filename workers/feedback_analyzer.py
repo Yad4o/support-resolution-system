@@ -41,7 +41,7 @@ import argparse
 import json
 import logging
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Dict, List
 
