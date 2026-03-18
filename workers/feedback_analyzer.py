@@ -171,8 +171,13 @@ def analyze_feedback(records: List[Dict]) -> Dict:
         for status, vals in by_status.items()
     }
 
-    # Rating distribution
-    rating_distribution = dict(Counter(r["rating"] for r in records if r["rating"] is not None))
+    # Rating distribution.
+    # Keys are explicitly converted to strings so the JSON representation
+    # is consistent (JSON always coerces object keys to strings anyway).
+    rating_distribution = {
+        str(k): v
+        for k, v in Counter(r["rating"] for r in records if r["rating"] is not None).items()
+    }
 
     return {
         "total_feedback": total,

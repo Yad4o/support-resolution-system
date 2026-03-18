@@ -191,14 +191,19 @@ def run_metrics_collector(output_path: Path = DEFAULT_OUTPUT) -> Dict:
 # ---------------------------------------------------------------------------
 
 def _parse_args(argv=None):
+    # Generate a timestamped default filename for CLI use so each standalone
+    # run produces a distinct snapshot rather than overwriting the previous one.
+    _ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    _default_cli_output = project_root / f"metrics_{_ts}.json"
+
     parser = argparse.ArgumentParser(
         description="Metrics collector — aggregate system-wide stats and persist results.",
     )
     parser.add_argument(
         "--output",
         type=Path,
-        default=DEFAULT_OUTPUT,
-        help="Path to write the JSON metrics snapshot (default: metrics.json).",
+        default=_default_cli_output,
+        help="Path to write the JSON metrics snapshot (default: metrics_<timestamp>.json).",
     )
     return parser.parse_args(argv)
 

@@ -64,7 +64,12 @@ DEFAULT_OUTPUT = project_root / "embeddings.json"
 
 
 # ---------------------------------------------------------------------------
-# TF-IDF helpers (mirrors app/services/similarity_search.py)
+# TF-IDF helpers
+# These use the same IDF formula as app/services/similarity_search.py but
+# compute IDF over the resolved-ticket corpus only (not [query + corpus]).
+# Cached vectors therefore use a slightly different weighting than the
+# runtime similarity scorer; they serve as a precomputed approximation
+# suitable for batch indexing.
 # ---------------------------------------------------------------------------
 
 def _tokenize(text: str) -> List[str]:

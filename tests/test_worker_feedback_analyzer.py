@@ -214,8 +214,9 @@ class TestAnalyzeFeedback:
         ]
         result = analyze_feedback(records)
         dist = result["rating_distribution"]
-        assert dist[5] == 2
-        assert dist[3] == 1
+        # Keys are strings (consistent with JSON serialization)
+        assert dist["5"] == 2
+        assert dist["3"] == 1
 
     def test_single_record(self):
         records = [_make_record(rating=5, resolved=True, intent="login_issue", ticket_status="auto_resolved")]

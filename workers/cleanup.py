@@ -76,17 +76,13 @@ def archive_old_tickets(db: Session, cutoff_date: datetime, dry_run: bool = Fals
     Returns:
         Number of tickets archived (or that would be archived in dry-run mode).
     """
-    tickets = (
-        db.query(Ticket)
-        .filter(
-            Ticket.status.in_(ARCHIVABLE_STATUSES),
-            Ticket.is_archived.is_(False),  # skip already-archived tickets (idempotency)
-            Ticket.created_at < cutoff_date,
-        )
-        .all()
+    base_query = db.query(Ticket).filter(
+        Ticket.status.in_(ARCHIVABLE_STATUSES),
+        Ticket.is_archived.is_(False),  # skip already-archived tickets (idempotency)
+        Ticket.created_at < cutoff_date,
     )
 
-    count = len(tickets)
+    count = base_query.count()
     if count == 0:
         logger.info("No old tickets found to archive.")
         return 0
@@ -94,18 +90,10 @@ def archive_old_tickets(db: Session, cutoff_date: datetime, dry_run: bool = Fals
     logger.info("Found %d ticket(s) eligible for archiving (before %s).", count, cutoff_date.date())
 
     if dry_run:
-        for ticket in tickets:
-            logger.info(
-                "[DRY-RUN] Would archive ticket id=%d status=%s created_at=%s",
-                ticket.id,
-                ticket.status,
-                ticket.created_at,
-            )
+        logger.info("[DRY-RUN] Would archive %d ticket(s).", count)
         return count
 
-    for ticket in tickets:
-        ticket.is_archived = True
-
+    base_query.update({Ticket.is_archived: True}, synchronize_session=False)
     db.commit()
     logger.info("Archived %d ticket(s).", count)
     return count
@@ -125,15 +113,15 @@ def remove_orphaned_feedback(db: Session, dry_run: bool = False) -> int:
     Returns:
         Number of orphaned feedback records removed.
     """
+    from sqlalchemy import exists
     from app.models.feedback import Feedback
 
-    orphaned = (
-        db.query(Feedback)
-        .filter(~Feedback.ticket_id.in_(db.query(Ticket.id)))
-        .all()
+    # Use NOT EXISTS for set-based efficiency (avoids large IN-list)
+    orphan_query = db.query(Feedback).filter(
+        ~exists().where(Ticket.id == Feedback.ticket_id)
     )
 
-    count = len(orphaned)
+    count = orphan_query.count()
     if count == 0:
         logger.info("No orphaned feedback records found.")
         return 0
@@ -141,13 +129,10 @@ def remove_orphaned_feedback(db: Session, dry_run: bool = False) -> int:
     logger.info("Found %d orphaned feedback record(s).", count)
 
     if dry_run:
-        for fb in orphaned:
-            logger.info("[DRY-RUN] Would delete orphaned feedback id=%d ticket_id=%d", fb.id, fb.ticket_id)
+        logger.info("[DRY-RUN] Would delete %d orphaned feedback record(s).", count)
         return count
 
-    for fb in orphaned:
-        db.delete(fb)
-
+    orphan_query.delete(synchronize_session=False)
     db.commit()
     logger.info("Removed %d orphaned feedback record(s).", count)
     return count
