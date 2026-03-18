@@ -34,7 +34,7 @@ DO NOT:
 
 Usage:
 ------
-    python workers/metrics_collector.py [--output metrics.json]
+    python workers/metrics_collector.py [--output metrics_<YYYYMMDD_HHMMSS>.json]
 """
 
 import argparse

@@ -65,11 +65,12 @@ DEFAULT_OUTPUT = project_root / "embeddings.json"
 
 # ---------------------------------------------------------------------------
 # TF-IDF helpers
-# These use the same IDF formula as app/services/similarity_search.py but
-# compute IDF over the resolved-ticket corpus only (not [query + corpus]).
-# Cached vectors therefore use a slightly different weighting than the
-# runtime similarity scorer; they serve as a precomputed approximation
-# suitable for batch indexing.
+# These implement a standard smoothed TF-IDF: IDF is computed over the
+# resolved-ticket corpus (the full batch being embedded).  This differs from
+# the runtime similarity scorer in app/services/similarity_search.py, which
+# incorporates the incoming query into the IDF corpus at search time.
+# Precomputed vectors therefore use corpus-only weighting and serve as a
+# fast approximation for batch indexing.
 # ---------------------------------------------------------------------------
 
 def _tokenize(text: str) -> List[str]:
@@ -136,7 +137,9 @@ def build_embeddings(tickets: List[Dict]) -> Dict:
     Build TF-IDF embeddings for a list of ticket dicts.
 
     Args:
-        tickets: Each dict must contain at least a ``message`` key.
+        tickets: Each dict must contain both an ``id`` key (used as the vector
+            identifier) and a ``message`` key (the text to embed).  Entries
+            missing a ``message`` value are silently skipped.
 
     Returns:
         A dict with:
