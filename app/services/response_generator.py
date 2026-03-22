@@ -1,4 +1,5 @@
 from typing import Optional
+import logging
 
 
 def generate_response(intent: str, original_message: str, similar_solution: Optional[str] = None) -> str:
@@ -24,7 +25,29 @@ def generate_response(intent: str, original_message: str, similar_solution: Opti
     # Priority 1: Reuse similar solution if provided
     # NOTE: similar_solution is passed through verbatim - callers must sanitize
     if similar_solution and similar_solution.strip():
-        clean_solution = similar_solution.strip()[:500]
+        stripped_solution = similar_solution.strip()
+        
+        if len(stripped_solution) > 500:
+            # Attempt to truncate at the last sentence boundary within the first 500 chars
+            truncated_text = stripped_solution[:500]
+            last_sentence_end = max(
+                truncated_text.rfind('.'),
+                truncated_text.rfind('!'),
+                truncated_text.rfind('?')
+            )
+            
+            if last_sentence_end != -1:
+                clean_solution = truncated_text[:last_sentence_end + 1]
+            else:
+                clean_solution = truncated_text + "... (solution abbreviated)"
+            
+            # Emit warning via module logger
+            logging.getLogger(__name__).warning(
+                f"Solution truncated from {len(stripped_solution)} to {len(clean_solution)} characters"
+            )
+        else:
+            clean_solution = stripped_solution
+        
         return f"I understand you're experiencing an issue. Based on a similar case, here's what helped: {clean_solution}"
 
     # Priority 2: Intent-based static templates
