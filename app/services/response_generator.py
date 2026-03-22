@@ -15,15 +15,19 @@ def generate_response(intent: str, original_message: str, similar_solution: Opti
         similar_solution: Optional solution from a similar resolved ticket to reuse.
                           NOTE: This parameter is trusted/raw user-provided content.
                           Callers are responsible for sanitization/validation before
-                          calling this function. The function will pass through the
-                          similar_solution verbatim without sanitization.
+                          calling this function. The function will strip whitespace,
+                          truncate inputs longer than 500 chars at the last sentence
+                          boundary (or append "... (solution abbreviated)" if none),
+                          emit a warning via logging.getLogger(__name__).warning with
+                          original and truncated lengths, and return a prefixed message
+                          containing the cleaned solution.
         
     Returns:
         str: Generated response text
     """
     
     # Priority 1: Reuse similar solution if provided
-    # NOTE: similar_solution is passed through verbatim - callers must sanitize
+    # NOTE: similar_solution is stripped, truncated if >500 chars, and logged
     if similar_solution and similar_solution.strip():
         stripped_solution = similar_solution.strip()
         
