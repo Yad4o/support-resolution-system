@@ -5,36 +5,51 @@ from sqlalchemy.orm import sessionmaker
 from app.db.session import get_db, Base
 from app.main import app
 from app.models.ticket import Ticket
+import os
+import tempfile
 
-
-# Test database setup
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test_ai_pipeline.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
-def override_get_db():
+@pytest.fixture(scope="session")
+def temp_db_file():
+    f = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    db_path = f.name
+    f.close()
+    yield db_path
     try:
-        db = TestingSessionLocal()
-        yield db
-    finally:
-        db.close()
+        os.unlink(db_path)
+    except Exception:
+        pass
 
 
 @pytest.fixture(scope="function")
-def client():
-    """Create test client with database override."""
-    app.dependency_overrides[get_db] = override_get_db
+def db_engine(temp_db_file):
+    url = f"sqlite:///{temp_db_file}"
+    engine = create_engine(url, connect_args={"check_same_thread": False})
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    return engine, TestingSessionLocal
+
+def override_get_db(db_engine):
+    engine, TestingSessionLocal = db_engine
+    def _override():
+        try:
+            db = TestingSessionLocal()
+            yield db
+        finally:
+            db.close()
+    return _override
+
+
+@pytest.fixture(scope="function")
+def client(db_engine):
+    app.dependency_overrides[get_db] = override_get_db(db_engine)
     try:
         yield TestClient(app)
     finally:
-        # Clean up override after test
         app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.fixture(scope="function")
-def db_session():
-    """Create test database session."""
+def db_session(db_engine):
+    engine, TestingSessionLocal = db_engine
     Base.metadata.create_all(bind=engine)
     db = TestingSessionLocal()
     try:

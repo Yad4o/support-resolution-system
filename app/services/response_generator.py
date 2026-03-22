@@ -24,8 +24,9 @@ def generate_response(intent: str, original_message: str, similar_solution: Opti
     # Priority 1: Reuse similar solution if provided
     # NOTE: similar_solution is passed through verbatim - callers must sanitize
     if similar_solution and similar_solution.strip():
-        return f"I understand you're experiencing an issue. Based on a similar case, here's what helped: {similar_solution}"
-    
+        clean_solution = similar_solution.strip()[:500]
+        return f"I understand you're experiencing an issue. Based on a similar case, here's what helped: {clean_solution}"
+
     # Priority 2: Intent-based static templates
     response_templates = {
         "login_issue": [
