@@ -1,4 +1,5 @@
 from typing import Optional
+import logging
 
 
 def generate_response(intent: str, original_message: str, similar_solution: Optional[str] = None) -> str:
@@ -14,18 +15,45 @@ def generate_response(intent: str, original_message: str, similar_solution: Opti
         similar_solution: Optional solution from a similar resolved ticket to reuse.
                           NOTE: This parameter is trusted/raw user-provided content.
                           Callers are responsible for sanitization/validation before
-                          calling this function. The function will pass through the
-                          similar_solution verbatim without sanitization.
+                          calling this function. The function will strip whitespace,
+                          truncate inputs longer than 500 chars at the last sentence
+                          boundary (or append "... (solution abbreviated)" if none),
+                          emit a warning via logging.getLogger(__name__).warning with
+                          original and truncated lengths, and return a prefixed message
+                          containing the cleaned solution.
         
     Returns:
         str: Generated response text
     """
     
     # Priority 1: Reuse similar solution if provided
-    # NOTE: similar_solution is passed through verbatim - callers must sanitize
+    # NOTE: similar_solution is stripped, truncated if >500 chars, and logged
     if similar_solution and similar_solution.strip():
-        return f"I understand you're experiencing an issue. Based on a similar case, here's what helped: {similar_solution}"
-    
+        stripped_solution = similar_solution.strip()
+        
+        if len(stripped_solution) > 500:
+            # Attempt to truncate at the last sentence boundary within the first 500 chars
+            truncated_text = stripped_solution[:500]
+            last_sentence_end = max(
+                truncated_text.rfind('.'),
+                truncated_text.rfind('!'),
+                truncated_text.rfind('?')
+            )
+            
+            if last_sentence_end != -1:
+                clean_solution = truncated_text[:last_sentence_end + 1]
+            else:
+                clean_solution = truncated_text + "... (solution abbreviated)"
+            
+            # Emit warning via module logger
+            logging.getLogger(__name__).warning(
+                f"Solution truncated from {len(stripped_solution)} to {len(clean_solution)} characters"
+            )
+        else:
+            clean_solution = stripped_solution
+        
+        return f"I understand you're experiencing an issue. Based on a similar case, here's what helped: {clean_solution}"
+
     # Priority 2: Intent-based static templates
     response_templates = {
         "login_issue": [
