@@ -121,7 +121,7 @@ response_templates = {
         # 0 — duplicate / unexpected charge
         "We're sorry to hear about an unexpected charge. Please share the transaction ID(s) from your "
         "bank statement so we can investigate. If a duplicate charge is confirmed, refunds are typically "
-        "processed within 3–5 business days back to your original payment method.",
+        "processed within 3-5 business days back to your original payment method.",
 
         # 1 — payment declined
         "Payments can be declined for several reasons: an expired card, insufficient funds, or your bank "
@@ -202,6 +202,6 @@ response_templates = {
 
         # 2 — contact / default
         "You can reach our support team by emailing support@example.com or using the live chat in "
-        "the bottom-right corner of the app. Live chat is available Monday–Friday, 9 am–6 pm UTC.",
+        "the bottom-right corner of the app. Live chat is available Monday-Friday, 9 am-6 pm UTC.",
     ],
 }

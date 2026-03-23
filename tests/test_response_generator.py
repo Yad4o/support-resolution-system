@@ -24,7 +24,7 @@ def test_generate_response_without_similar_solution():
 
     # "I was charged twice" matches duplicate/unexpected keywords → template 0
     assert "transaction" in result.lower()
-    assert "3-5 business day" in result.lower() or "3–5 business" in result.lower()
+    assert "3-5 business day" in result.lower() 
 
 
 def test_generate_response_question():
@@ -138,7 +138,6 @@ def test_generate_response_is_deterministic():
     assert result1 == result2  # Deterministic
     assert isinstance(result1, str)  # Only returns text
 
-from app.services.response_generator import generate_response
 
 
 def test_login_forgot_password_returns_reset_flow_template():
