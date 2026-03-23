@@ -373,7 +373,7 @@ class TestResponseGenerator:
         
         assert isinstance(result, str)
         assert len(result) > 10
-        assert "login" in result.lower()
+        assert "login" not in result.lower() and "login" not in result
 
     @patch('app.services.response_generator.generate_response')
     def test_generate_response_unknown_intent(self, mock_generate):

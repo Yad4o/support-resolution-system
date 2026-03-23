@@ -81,7 +81,7 @@ def _select_template(intent: str, message: str) -> str:
     # Reordered keyword rules: specific billing/security keywords first
     keyword_rules = {
         "login_issue": [
-            (["forgot", "reset", "remember", "lost", "recovery", "login"], 0),
+            (["forgot", "reset", "remember", "lost", "recovery"], 0),
             (["locked", "lock", "blocked", "2fa", "two factor", "suspended", "attempts"], 1),
         ],
         "payment_issue": [
@@ -102,7 +102,7 @@ def _select_template(intent: str, message: str) -> str:
         ],
         "general_query": [
             # Specific billing/security keywords first
-            (["price", "pricing", "cost", "plan", "upgrade", "subscribe", "billing", "renew", "subscription", "two-factor", "two factor"], 1),
+            (["price", "pricing", "cost", "plan", "upgrade", "subscribe", "billing", "renew", "subscription", "two-factor", "two factor", "login"], 1),
             # Generic question words last
             (["how", "what", "where", "when", "guide", "steps", "tutorial", "why", "new", "cancel"], 0),
         ],
@@ -127,7 +127,7 @@ def _clean_similar_solution(solution: str) -> str:
     Returns:
         str: Cleaned, bounded, and normalized solution
     """
-    # Detect and remove existing wrapper prefixes
+    # Detect and remove existing wrapper prefixes - loop to remove all matches
     wrapper_prefixes = [
         "I understand you're experiencing an issue. Based on a similar case, here's what helped:",
         "Based on a similar case, here's what helped:",
@@ -136,11 +136,17 @@ def _clean_similar_solution(solution: str) -> str:
     ]
     
     cleaned = solution.strip()
-    for prefix in wrapper_prefixes:
-        if cleaned.lower().startswith(prefix.lower()):
-            # Remove the prefix and any following whitespace/colon
-            cleaned = cleaned[len(prefix):].lstrip(': ').strip()
-            break
+    # Keep removing prefixes until none match
+    while True:
+        found_prefix = False
+        for prefix in wrapper_prefixes:
+            if cleaned.lower().startswith(prefix.lower()):
+                # Remove prefix and any following whitespace/colon
+                cleaned = cleaned[len(prefix):].lstrip(': ').strip()
+                found_prefix = True
+                break
+        if not found_prefix:
+            break  # No more prefixes to remove
     
     # Normalize whitespace
     cleaned = re.sub(r'\s+', ' ', cleaned)
