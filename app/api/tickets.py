@@ -26,6 +26,10 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 import logging
+from typing import Optional
+from app.models.ticket import Ticket
+from app.services.classifier import classify_intent
+from app.services.response_generator import generate_response
 
 from app.schemas.ticket import (
     TicketCreate,
@@ -63,9 +67,67 @@ def _run_ticket_automation(ticket: Ticket, db: Session) -> Ticket:
     intent = classification["intent"]
     confidence = classification["confidence"]
 
+    # ---------------------------------------------------------------------------
+# Internal automation helper
+# ---------------------------------------------------------------------------
+ 
+async def _run_ticket_automation(ticket: Ticket, db) -> Ticket:
+    """
+    Classify the ticket text, store classification results, generate a
+    response, and persist everything back to the database.
+    """
+    raw_text = f"{ticket.subject or ''} {ticket.body or ''}".strip()
+ 
+    # --- Classification ---------------------------------------------------
+    classification = classify_intent(raw_text)
+ 
+    intent     = classification.get("intent")
+    confidence = classification.get("confidence")
+    sub_intent = classification.get("sub_intent")
+ 
+    ticket.intent     = intent
+    ticket.confidence = confidence
+    ticket.sub_intent = sub_intent
+ 
+    # --- Response generation ---------------------------------------------
+    ticket.response = generate_response(
+        text=raw_text,
+        intent=intent,
+        sub_intent=sub_intent,
+    )
+ 
+    db.add(ticket)
+    db.commit()
+    db.refresh(ticket)
+    return ticket
+
     # Update ticket with classification results
     ticket.intent = intent
     ticket.confidence = confidence
+
+    # ---------------------------------------------------------------------------
+# Route handlers (FastAPI-style stubs — wire to your router as needed)
+# ---------------------------------------------------------------------------
+ 
+def create_ticket_handler(payload: dict, db) -> Ticket:
+    """Create a new ticket and run automation."""
+    ticket = Ticket(
+        subject=payload.get("subject"),
+        body=payload.get("body"),
+    )
+    db.add(ticket)
+    db.commit()
+    db.refresh(ticket)
+ 
+    import asyncio
+    return asyncio.get_event_loop().run_until_complete(
+        _run_ticket_automation(ticket, db)
+    )
+ 
+ 
+def get_ticket_handler(ticket_id: int, db) -> Optional[Ticket]:
+    """Fetch a single ticket by ID."""
+    return db.query(Ticket).filter(Ticket.id == ticket_id).first()
 
     # Fetch resolved tickets for similarity search
     resolved_tickets = (
@@ -105,7 +167,7 @@ def _run_ticket_automation(ticket: Ticket, db: Session) -> Ticket:
         similar_solution = (
             similar_result["ticket"]["response"] if similar_result else None
         )
-        response = generate_response(intent, ticket.message, similar_solution)
+        response = generate_response(intent, ticket.message, similar_solution, sub_intent=sub_intent)
 
         # Update ticket
         ticket.status = "auto_resolved"
@@ -317,18 +379,4 @@ def get_ticket(
         )
 
 
-# -------------------------------------------------
-# TODO (Future Enhancements - Phase 3)
-# -------------------------------------------------
-# 
-# POST /tickets/{id}/resolve - Trigger ticket resolution
-# POST /tickets/{id}/escalate - Manual escalation
-# GET /tickets/{id}/history - Ticket change history
-# PUT /tickets/{id} - Update ticket (if needed)
-# DELETE /tickets/{id} - Soft delete tickets
-#
-# AI Integration (Phase 3):
-# - Automatic intent classification on ticket creation
-# - Similarity search for duplicate detection
-# - Auto-resolution for common issues
-# - Confidence scoring and threshold handling
+
