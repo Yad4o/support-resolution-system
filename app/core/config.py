@@ -129,6 +129,28 @@ class Settings(BaseSettings):
     # Rate Limiting
     # -------------------------------------------------
     RATE_LIMIT_PER_MINUTE: int = 60
+    
+    # -------------------------------------------------
+    # Support Configuration
+    # -------------------------------------------------
+    STATUS_PAGE_URL: str = "https://status.example.com"
+    SUPPORT_EMAIL: str = "support@example.com"
+    
+    @field_validator("STATUS_PAGE_URL")
+    @classmethod
+    def validate_status_page_url(cls, v: str) -> str:
+        """Validate that STATUS_PAGE_URL is a valid URL."""
+        if not v or not v.startswith(('http://', 'https://')):
+            raise ValueError("STATUS_PAGE_URL must be a valid HTTP/HTTPS URL")
+        return v
+    
+    @field_validator("SUPPORT_EMAIL")
+    @classmethod
+    def validate_support_email(cls, v: str) -> str:
+        """Validate that SUPPORT_EMAIL is a valid email address."""
+        if not v or '@' not in v:
+            raise ValueError("SUPPORT_EMAIL must be a valid email address")
+        return v
 
 @lru_cache
 def get_settings() -> Settings:
