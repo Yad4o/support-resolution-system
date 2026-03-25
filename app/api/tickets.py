@@ -52,7 +52,7 @@ router = APIRouter(prefix="/tickets", tags=["Tickets"])
 # Internal automation helper
 # ---------------------------------------------------------------------------
  
-async def _run_ticket_automation(ticket: Ticket, db: Session) -> Ticket:
+def _run_ticket_automation(ticket: Ticket, db: Session) -> Ticket:
     """
     Run the AI automation pipeline for a given ticket.
     - Intent classification
@@ -69,6 +69,7 @@ async def _run_ticket_automation(ticket: Ticket, db: Session) -> Ticket:
     # Update ticket with classification results
     ticket.intent = intent
     ticket.confidence = confidence
+    ticket.sub_intent = sub_intent
 
     # Fetch resolved tickets for similarity search
     resolved_tickets = (
@@ -175,7 +176,7 @@ async def create_ticket(
         
         # Step 2: Run AI pipeline
         try:
-            ticket = await _run_ticket_automation(ticket=ticket, db=db)
+            ticket = _run_ticket_automation(ticket=ticket, db=db)
             
         except Exception as ai_error:
             # AI failure: escalate for safety (never block user)
