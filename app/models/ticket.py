@@ -68,6 +68,12 @@ class Ticket(Base):
         doc="Predicted intent (e.g., login_issue, payment, refund)",
     )
 
+    sub_intent = Column(
+        String,
+        nullable=True,
+        doc="Sub-category of intent (e.g. password_reset)",
+    )
+
     confidence = Column(
         Float,
         nullable=True,
@@ -100,13 +106,6 @@ class Ticket(Base):
         nullable=False,
         doc="Timestamp when the ticket was created",
     )
-
-    # -------------------------------------------------
-    # TODO (Future Enhancements)
-    # -------------------------------------------------
-    # - updated_at timestamp
-    # - resolved_at timestamp
-    # - user_id (foreign key)
 
     # -------------------------------------------------
     # Relationships

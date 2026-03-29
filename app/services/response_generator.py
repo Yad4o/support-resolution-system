@@ -173,8 +173,25 @@ def _clean_similar_solution(solution: str) -> str:
     
     return cleaned
 
+_sub_intent_to_index: dict[str, int] = {
+    "password_reset":    0,
+    "account_locked":    1,
+    "wrong_credentials": 2,
+    "duplicate_charge":  0,
+    "payment_declined":  1,
+    "billing_question":  2,
+    "delete_account":    0,
+    "update_info":       1,
+    "crash_error":       0,
+    "performance":       1,
+    "new_feature":       0,
+    "improvement":       1,
+    "how_to":            0,
+    "pricing_plan":      1,
+}
 
-def generate_response(intent: str, original_message: str, similar_solution: Optional[str] = None) -> str:
+
+def generate_response(intent: str, original_message: str, similar_solution: Optional[str] = None, sub_intent: Optional[str] = None) -> str:
     """
     Generate a human-readable response based on intent, original message, and similar solution.
 
@@ -199,9 +216,15 @@ def generate_response(intent: str, original_message: str, similar_solution: Opti
         cleaned_solution = _clean_similar_solution(similar_solution)
         return f"I understand you're experiencing an issue. Based on a similar case, here's what helped: {cleaned_solution}"
 
-    # Priority 2: Intent-based static templates - always delegate to selector
-    return _select_template(intent, original_message)
+    # Priority 2: sub_intent fast-path — skip keyword detection entirely
+    if sub_intent is not None:
+        idx = _sub_intent_to_index.get(sub_intent)
+        if idx is not None and intent in response_templates:
+            templates = response_templates[intent]
+            return templates[min(idx, len(templates) - 1)]
 
+    # Priority 3: Intent-based static templates — delegate to keyword selector
+    return _select_template(intent, original_message)
 
 # ---------------------------------------------------------------------------
 # Response templates — each entry addresses a distinct sub-problem

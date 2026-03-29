@@ -76,6 +76,7 @@ class TicketResponse(BaseModel):
     id: int
     message: str
     intent: Optional[str] = None
+    sub_intent: Optional[str] = None
     confidence: Optional[float] = None
     status: str
     response: Optional[str] = None

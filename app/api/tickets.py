@@ -32,40 +32,40 @@ from app.schemas.ticket import (
     TicketResponse,
     TicketList,
 )
-from app.db.session import get_db
 from app.models.ticket import Ticket
 from app.services.classifier import classify_intent
-from app.services.similarity_search import find_similar_ticket
-from app.services.decision_engine import decide_resolution
 from app.services.response_generator import generate_response
+from app.db.session import get_db
 from app.core.config import settings
 from fastapi import status
+from app.services.similarity_search import find_similar_ticket
+from app.services.decision_engine import decide_resolution
 
-# Configure logging
 logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/tickets", tags=["Tickets"])
 
-
+# ---------------------------------------------------------------------------
+# Internal automation helper
+# ---------------------------------------------------------------------------
+ 
 def _run_ticket_automation(ticket: Ticket, db: Session) -> Ticket:
     """
     Run the AI automation pipeline for a given ticket.
-
-    This function encapsulates the orchestration of:
     - Intent classification
     - Similarity search against resolved tickets
     - Resolution decision (auto-resolve vs escalate)
     - Response generation for auto-resolved tickets
-
-    It updates and persists the ticket accordingly and returns the
-    refreshed instance.
     """
     # Classify intent
     classification = classify_intent(ticket.message)
     intent = classification["intent"]
     confidence = classification["confidence"]
+    sub_intent = classification.get("sub_intent")
 
     # Update ticket with classification results
     ticket.intent = intent
     ticket.confidence = confidence
+    ticket.sub_intent = sub_intent
 
     # Fetch resolved tickets for similarity search
     resolved_tickets = (
@@ -80,14 +80,10 @@ def _run_ticket_automation(ticket: Ticket, db: Session) -> Ticket:
     )
 
     # Convert to list of dicts for similarity search
-    resolved_tickets_data = []
-    for resolved_ticket in resolved_tickets:
-        resolved_tickets_data.append(
-            {
-                "message": resolved_ticket.message,
-                "response": resolved_ticket.response,
-            }
-        )
+    resolved_tickets_data = [
+        {"message": t.message, "response": t.response}
+        for t in resolved_tickets
+    ]
 
     # Find similar tickets
     similar_result = find_similar_ticket(
@@ -101,41 +97,35 @@ def _run_ticket_automation(ticket: Ticket, db: Session) -> Ticket:
 
     # Process decision
     if decision == "AUTO_RESOLVE":
-        # Generate response
         similar_solution = (
             similar_result["ticket"]["response"] if similar_result else None
         )
-        response = generate_response(intent, ticket.message, similar_solution)
-
-        # Update ticket
+        ticket.response = generate_response(
+            intent,
+            ticket.message,
+            similar_solution=similar_solution,
+            sub_intent=sub_intent,
+        )
         ticket.status = "auto_resolved"
-        ticket.response = response
-
         logger.info(
             f"Ticket {ticket.id} auto-resolved with intent {intent} "
             f"(confidence: {confidence})"
         )
     else:  # ESCALATE
-        # Update ticket
         ticket.status = "escalated"
         ticket.response = None
-
         logger.info(
             f"Ticket {ticket.id} escalated with intent {intent} "
             f"(confidence: {confidence})"
         )
 
     # Save AI results
+    db.add(ticket)
     db.commit()
     db.refresh(ticket)
-
     return ticket
 
-
-router = APIRouter(
-    prefix="/tickets",
-    tags=["Tickets"]
-)
+  
 
 
 @router.post("/", response_model=TicketResponse, status_code=status.HTTP_201_CREATED)
@@ -194,6 +184,7 @@ def create_ticket(
             ticket.status = "escalated"
             ticket.intent = None
             ticket.confidence = None
+            ticket.sub_intent = None 
             ticket.response = None
             
             db.commit()
@@ -317,18 +308,4 @@ def get_ticket(
         )
 
 
-# -------------------------------------------------
-# TODO (Future Enhancements - Phase 3)
-# -------------------------------------------------
-# 
-# POST /tickets/{id}/resolve - Trigger ticket resolution
-# POST /tickets/{id}/escalate - Manual escalation
-# GET /tickets/{id}/history - Ticket change history
-# PUT /tickets/{id} - Update ticket (if needed)
-# DELETE /tickets/{id} - Soft delete tickets
-#
-# AI Integration (Phase 3):
-# - Automatic intent classification on ticket creation
-# - Similarity search for duplicate detection
-# - Auto-resolution for common issues
-# - Confidence scoring and threshold handling
+
