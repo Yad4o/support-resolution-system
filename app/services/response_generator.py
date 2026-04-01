@@ -146,8 +146,6 @@ def _sanitize_similar_solution(solution: str) -> str:
     Returns:
         str: Sanitized solution safe for reuse
     """
-    import re
-    
     # Remove common PII patterns
     patterns_to_redact = [
         r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',  # Email addresses
@@ -191,7 +189,6 @@ def generate_response(intent: str, original_message: str, similar_solution: Opti
     1. Similar solution (if high quality)
     2. OpenAI API (if configured)
     3. Template-based response
-    4. Hardcoded fallback
     
     Args:
         intent: The classified intent (e.g., 'login_issue', 'payment_issue')
