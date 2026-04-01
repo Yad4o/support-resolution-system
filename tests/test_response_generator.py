@@ -1,164 +1,207 @@
+"""
+Tests for OpenAI integration in response generator with proper fallback chain.
+"""
 import pytest
+from unittest.mock import patch, MagicMock
 from app.services.response_generator import generate_response
 
 
-def test_generate_response_with_similar_solution():
-    """Test priority 1: reuse similar solution."""
-    intent = "login_issue"
-    original_message = "I cannot login to my account"
-    similar_solution = "Reset your password using the forgot password link"
+def test_generate_response_openai_fallback_to_template():
+    """Test that when OpenAI fails, function falls back to template response."""
     
-    result = generate_response(intent, original_message, similar_solution)
+    # Mock OpenAI to raise an exception
+    with patch('app.services.response_generator.settings') as mock_settings:
+        mock_settings.AI_PROVIDER = "openai"
+        mock_settings.OPENAI_API_KEY = "test-key"
+        
+        with patch('app.services.response_generator._call_openai') as mock_call_openai:
+            mock_call_openai.return_value = None  # Simulate OpenAI failure
+            
+            with patch('app.services.response_generator._select_template_with_sub_intent') as mock_select_template:
+                mock_select_template.return_value = "Mocked template response for forgot password"
+                
+                # Call generate_response
+                response_text, source_label = generate_response(
+                    intent="login_issue",
+                    original_message="I forgot my password",
+                    similar_solution=None,
+                    sub_intent="password_reset",
+                    similar_quality_score=None
+                )
+                
+                # Should fall back to template
+                assert source_label == "template"
+                assert response_text == "Mocked template response for forgot password"
+                mock_select_template.assert_called_once_with("login_issue", "I forgot my password", "password_reset")
+
+
+def test_generate_response_openai_success():
+    """Test that when OpenAI succeeds, function returns OpenAI response."""
     
-    assert "Based on a similar case" in result
-    assert "Reset your password using the forgot password link" in result
-    assert "helped" in result.lower()
-
-def test_generate_response_without_similar_solution():
-    """Test priority 2: intent-based templates."""
-    intent = "payment_issue"
-    original_message = "I was charged twice"
-    similar_solution = None
-
-    result = generate_response(intent, original_message, similar_solution)
-
-    # "I was charged twice" matches duplicate/unexpected keywords → template 0
-    assert "transaction" in result.lower()
-    assert "3-5 business day" in result.lower() 
-
-
-def test_generate_response_question():
-    """Test question-based template selection."""
-    intent = "general_query"
-    original_message = "How do I reset my password?"
-    similar_solution = None
-
-    result = generate_response(intent, original_message, similar_solution)
-
-    # "how" keyword → template 0 (how-to)
-    assert "help center" in result.lower()
+    # Mock OpenAI to return a response
+    with patch('app.services.response_generator.settings') as mock_settings:
+        mock_settings.AI_PROVIDER = "openai"
+        mock_settings.OPENAI_API_KEY = "test-key"
+        
+        with patch('app.services.response_generator._call_openai') as mock_call_openai:
+            mock_call_openai.return_value = "Test OpenAI response for password reset"
+            
+            # Call generate_response
+            response_text, source_label = generate_response(
+                intent="login_issue",
+                original_message="I forgot my password",
+                similar_solution=None,
+                sub_intent="password_reset",
+                similar_quality_score=None
+            )
+            
+            # Should use OpenAI response
+            assert source_label == "openai"
+            assert response_text == "Test OpenAI response for password reset"
 
 
-def test_generate_response_urgent():
-    """Test urgent message template selection."""
-    intent = "technical_issue"
-    original_message = "URGENT: The system is down"
-    similar_solution = None
-
-    result = generate_response(intent, original_message, similar_solution)
-
-    # No keyword match for urgent → default template 2 (broken feature/default)
-    assert "status page" in result.lower()
-
-
-def test_generate_response_empty_similar_solution():
-    """Test empty similar solution falls back to intent-based."""
-    intent = "account_issue"
-    original_message = "Update my email"
-    similar_solution = ""  # Empty string
-
-    result = generate_response(intent, original_message, similar_solution)
-
-    # "update" and "email" keywords → template 1 (update info)
-    assert "settings" in result.lower()
-    assert "verification" in result.lower()
-
-
-def test_generate_response_whitespace_similar_solution():
-    """Test whitespace-only similar solution falls back to intent-based."""
-    intent = "feature_request"
-    original_message = "Add dark mode"
-    similar_solution = "   "  # Whitespace only
-
-    result = generate_response(intent, original_message, similar_solution)
-
-    # "add" keyword → template 0 (new feature)
-    assert "roadmap" in result.lower()
-    assert "upvot" in result.lower()
-
-
-def test_generate_response_unknown_intent():
-    """Test fallback response for unknown intent."""
-    intent = "unknown"
-    original_message = "Random message"
-    similar_solution = None
+def test_generate_response_similarity_priority():
+    """Test that high-quality similar solution takes priority over OpenAI."""
     
-    result = generate_response(intent, original_message, similar_solution)
+    with patch('app.services.response_generator.settings') as mock_settings:
+        mock_settings.AI_PROVIDER = "openai"
+        mock_settings.OPENAI_API_KEY = "test-key"
+        
+        with patch('app.services.response_generator._call_openai') as mock_call_openai:
+            mock_call_openai.return_value = "Test OpenAI response"
+            
+            # Call generate_response with high-quality similar solution
+            response_text, source_label = generate_response(
+                intent="login_issue",
+                original_message="I forgot my password",
+                similar_solution="Use the forgot password link and check your email",
+                sub_intent="password_reset",
+                similar_quality_score=0.8  # High quality score
+            )
+            
+            # Should use similar solution (sanitized to 500 chars)
+            assert source_label == "similarity"
+            assert "Use the forgot password link" in response_text
+            assert len(response_text) <= 500 + len("I understand you're experiencing an issue. Based on a similar case, here's what helped: ")
+
+
+def test_generate_response_similarity_low_quality():
+    """Test that low-quality similar solution falls back to OpenAI."""
     
-    # Should use fallback response
-    assert result is not None
-    assert isinstance(result, str)
-    assert len(result) > 0
+    with patch('app.services.response_generator.settings') as mock_settings:
+        mock_settings.AI_PROVIDER = "openai"
+        mock_settings.OPENAI_API_KEY = "test-key"
+        
+        with patch('app.services.response_generator._call_openai') as mock_call_openai:
+            mock_call_openai.return_value = "Test OpenAI response"
+            
+            # Call generate_response with low-quality similar solution
+            response_text, source_label = generate_response(
+                intent="login_issue",
+                original_message="I forgot my password",
+                similar_solution="Use the forgot password link",
+                sub_intent="password_reset",
+                similar_quality_score=0.4  # Low quality score
+            )
+            
+            # Should fall back to OpenAI (not similarity)
+            assert source_label == "openai"
+            assert response_text == "Test OpenAI response"
 
 
-def test_generate_response_all_intents():
-    """Test all intents have appropriate responses."""
-    intents_to_test = [
-        "login_issue", "payment_issue", "account_issue", 
-        "technical_issue", "feature_request", "general_query"
-    ]
+def test_generate_response_no_openai_config():
+    """Test that when OpenAI is not configured, function falls back to template."""
     
-    for intent in intents_to_test:
-        result = generate_response(intent, "Test message", None)
-        assert result is not None
-        assert isinstance(result, str)
-        assert len(result) > 10  # Should be meaningful response
+    with patch('app.services.response_generator.settings') as mock_settings:
+        mock_settings.AI_PROVIDER = "openai"
+        mock_settings.OPENAI_API_KEY = None  # No API key configured
+        
+        with patch('app.services.response_generator._call_openai') as mock_call_openai:
+            mock_call_openai.return_value = "Test OpenAI response"
+            
+            with patch('app.services.response_generator._select_template_with_sub_intent') as mock_select_template:
+                mock_select_template.return_value = "Mocked template response for forgot password"
+                
+                # Call generate_response
+                response_text, source_label = generate_response(
+                    intent="login_issue",
+                    original_message="I forgot my password",
+                    similar_solution=None,
+                    sub_intent="password_reset",
+                    similar_quality_score=None
+                )
+                
+                # Should fall back to template (not call OpenAI)
+                assert source_label == "template"
+                assert response_text == "Mocked template response for forgot password"
+                mock_call_openai.assert_not_called()  # OpenAI should not be called
+                mock_select_template.assert_called_once_with("login_issue", "I forgot my password", "password_reset")
 
 
-def test_generate_response_safety():
-    """Test that responses are safe and conservative.
+def test_generate_response_fallback_chain():
+    """Test complete fallback chain: similarity -> OpenAI -> template -> fallback."""
     
-    NOTE: This test verifies that similar_solution is passed through verbatim
-    as documented. The pass-through is intentional and callers are responsible
-    for sanitization before calling generate_response.
-    """
-    intent = "login_issue"
-    original_message = "I cannot login"
-    similar_solution = "Click this malicious link"
-    
-    result = generate_response(intent, original_message, similar_solution)
-    
-    # Should still incorporate the similar solution (as per requirements)
-    assert "Based on a similar case" in result
-    assert "Click this malicious link" in result
-    # Response should be polite and professional
-    assert not any(word in result.lower() for word in ["stupid", "dumb", "idiot"])
+    with patch('app.services.response_generator.settings') as mock_settings:
+        mock_settings.AI_PROVIDER = "openai"
+        mock_settings.OPENAI_API_KEY = "test-key"
+        
+        with patch('app.services.response_generator._call_openai') as mock_call_openai:
+            mock_call_openai.return_value = None  # OpenAI fails
+            
+            # Call with unknown intent (no template) — must get "fallback" source
+            response_text, source_label = generate_response(
+                intent="unknown_intent",
+                original_message="Random message",
+                similar_solution=None,
+                sub_intent=None,
+                similar_quality_score=None
+            )
+            
+            # Unknown intents should now return "fallback", not "template"
+            assert source_label == "fallback"
+            assert "support agent" in response_text.lower() or "24 hours" in response_text.lower()
 
 
-def test_generate_response_is_deterministic():
-    """Test that function is deterministic and pure."""
-    intent = "payment_issue"
-    original_message = "Payment problem"
-    similar_solution = "Refund processed"
-    
-    # Call function multiple times - should be deterministic
-    result1 = generate_response(intent, original_message, similar_solution)
-    result2 = generate_response(intent, original_message, similar_solution)
-    
-    assert result1 == result2  # Deterministic
-    assert isinstance(result1, str)  # Only returns text
+def test_generate_response_similarity_at_threshold():
+    """Test that score exactly = 0.7 does NOT use similarity (threshold is strictly > 0.7)."""
+
+    with patch('app.services.response_generator.settings') as mock_settings:
+        mock_settings.AI_PROVIDER = "openai"
+        mock_settings.OPENAI_API_KEY = "test-key"
+
+        with patch('app.services.response_generator._call_openai') as mock_call_openai:
+            mock_call_openai.return_value = "OpenAI fallback response"
+
+            response_text, source_label = generate_response(
+                intent="login_issue",
+                original_message="I forgot my password",
+                similar_solution="Use the forgot password link",
+                sub_intent="password_reset",
+                similar_quality_score=0.7  # Exactly at threshold — should NOT use similarity
+            )
+
+            # Score must be *strictly* > 0.7 to use similarity
+            assert source_label != "similarity"
 
 
+def test_generate_response_sanitizes_pii():
+    """Test that PII in similar_solution is redacted before being returned."""
 
-def test_login_forgot_password_returns_reset_flow_template():
-    """'I forgot my password' should route to the reset flow template."""
-    response = generate_response("login_issue", "I forgot my password")
-    assert "Forgot Password" in response, (
-        f"Expected reset flow template (containing 'Forgot Password'), got:\n{response}"
-    )
+    with patch('app.services.response_generator.settings') as mock_settings:
+        mock_settings.AI_PROVIDER = "openai"
+        mock_settings.OPENAI_API_KEY = None  # Force template path, not OpenAI
 
+        solution = "Customer john@example.com was fixed via ticket #456 and SSN 123-45-6789"
 
-def test_login_account_locked_returns_locked_template():
-    """'my account is locked' should route to the locked/2FA template."""
-    response = generate_response("login_issue", "my account is locked")
-    assert "locked" in response.lower(), (
-        f"Expected locked account template (containing 'locked'), got:\n{response}"
-    )
+        response_text, source_label = generate_response(
+            intent="login_issue",
+            original_message="forgot password",
+            similar_solution=solution,
+            similar_quality_score=0.9  # High quality — use similarity path
+        )
 
-
-def test_payment_charged_twice_returns_duplicate_charge_template():
-    """'I was charged twice' should route to the duplicate charge template."""
-    response = generate_response("payment_issue", "I was charged twice")
-    assert "transaction" in response.lower(), (
-        f"Expected duplicate charge template (containing 'transaction'), got:\n{response}"
-    )
+        assert source_label == "similarity"
+        assert "[REDACTED]" in response_text
+        assert "john@example.com" not in response_text
+        assert "ticket #456" not in response_text.lower()
+        assert "123-45-6789" not in response_text

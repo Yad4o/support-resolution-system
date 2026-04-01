@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 
 from app.models.ticket import Ticket
+from app.models.feedback import Feedback
 from app.services.decision_engine import decide_resolution, get_confidence_threshold, set_confidence_threshold
 from app.services.response_generator import generate_response
 from app.api.tickets import _run_ticket_automation
@@ -347,7 +348,7 @@ class TestResponseGenerator:
     @patch('app.services.response_generator.generate_response')
     def test_generate_response_with_similar_solution(self, mock_generate):
         """Test response generation with similar solution."""
-        mock_generate.return_value = "I understand you're experiencing a login issue. Based on a similar case, Reset your password"
+        mock_generate.return_value = ("I understand you're experiencing a login issue. Based on a similar case, Reset your password", "similarity")
         
         from app.services.response_generator import generate_response
         result = generate_response(
@@ -356,43 +357,62 @@ class TestResponseGenerator:
             similar_solution="Reset your password"
         )
         
-        assert "Reset your password" in result
-        assert "similar case" in result.lower()
+        assert "Reset your password" in result[0]
+        assert "similar case" in result[0].lower()
+        assert result[1] == "similarity"
         mock_generate.assert_called_once()
 
     @patch('app.services.response_generator.generate_response')
     def test_generate_response_without_similar_solution(self, mock_generate):
         """Test response generation without similar solution."""
-        mock_generate.return_value = "Please double-check the email address you're signing in with — it's easy to mix up similar addresses. Also check for any accidental leading or trailing spaces in your password field. If you originally signed up via Google or another social provider, try that sign-in option instead of entering a password directly."
+        mock_generate.return_value = ("Please double-check the email address you're signing in with — it's easy to mix up similar addresses. Also check for any accidental leading or trailing spaces in your password field. If you originally signed up via Google or another social provider, try that sign-in option instead of entering a password directly.", "template")
         
+        from app.services.response_generator import generate_response
         result = generate_response(
             intent="login_issue",
             original_message="Cannot login",
             similar_solution=None
         )
         
-        assert isinstance(result, str)
-        assert len(result) > 10
-        assert "login" not in result.lower() and "login" not in result
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        response_text, source_label = result
+        assert isinstance(response_text, str)
+        assert isinstance(source_label, str)
+        assert len(response_text) > 10
+        assert "login" not in response_text.lower()
 
     @patch('app.services.response_generator.generate_response')
     def test_generate_response_unknown_intent(self, mock_generate):
         """Test response generation for unknown intent."""
-        mock_generate.return_value = "I understand you need help. A support agent will assist you shortly."
+        mock_generate.return_value = ("I understand you need help. A support agent will assist you shortly.", "template")
         
+        from app.services.response_generator import generate_response
         result = generate_response(
             intent="unknown",
             original_message="Random text",
             similar_solution=None
         )
         
-        assert isinstance(result, str)
-        assert len(result) > 10
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        response_text, source_label = result
+        assert isinstance(response_text, str)
+        assert isinstance(source_label, str)
+        assert len(response_text) > 10
 
-    @patch('app.services.response_generator.generate_response')
-    def test_generate_response_error_handling(self, mock_generate):
+    @patch('app.services.response_generator._call_openai')
+    @patch('app.services.response_generator.settings')
+    def test_generate_response_error_handling(self, mock_settings, mock_openai):
         """Test error handling in response generator."""
-        mock_generate.side_effect = Exception("Response generation failed")
+        # Force OpenAI branch to be taken
+        mock_settings.AI_PROVIDER = "openai"
+        mock_settings.OPENAI_API_KEY = "fake-key"
+        mock_settings.OPENAI_MAX_TOKENS = 1000
+        mock_settings.OPENAI_TIMEOUT = 30
+        
+        # Make OpenAI return None to trigger fallback
+        mock_openai.return_value = None
         
         result = generate_response(
             intent="login_issue",
@@ -400,9 +420,14 @@ class TestResponseGenerator:
             similar_solution=None
         )
         
-        # Should return safe fallback
-        assert isinstance(result, str)
-        assert len(result) > 0
+        # Should return template fallback when OpenAI returns None
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        response_text, source_label = result
+        assert isinstance(response_text, str)
+        assert isinstance(source_label, str)
+        assert source_label == "template"
+        assert len(response_text) > 0
 
     @patch('app.services.response_generator.generate_response')
     def test_generate_response_all_intents(self, mock_generate):
@@ -410,7 +435,7 @@ class TestResponseGenerator:
         intents = ["login_issue", "payment_issue", "account_issue", "technical_issue", "feature_request", "general_query"]
         
         for intent in intents:
-            mock_generate.return_value = f"Response for {intent}"
+            mock_generate.return_value = (f"Response for {intent}", "template")
             
             from app.services.response_generator import generate_response
             result = generate_response(
@@ -419,8 +444,12 @@ class TestResponseGenerator:
                 similar_solution=None
             )
             
-            assert intent in result
-            assert isinstance(result, str)
+            assert isinstance(result, tuple)
+            assert len(result) == 2
+            response_text, source_label = result
+            assert intent in response_text
+            assert isinstance(response_text, str)
+            assert isinstance(source_label, str)
 
 
 class TestTicketAutomation:
@@ -434,7 +463,8 @@ class TestTicketAutomation:
         # Setup mocks
         mock_classify.return_value = {"intent": "login_issue", "confidence": 0.95}
         mock_similarity.return_value = {
-            "ticket": {"response": "Reset your password"}
+            "ticket": {"response": "Reset your password"},
+            "similarity_score": 0.8
         }
         mock_decision.return_value = "AUTO_RESOLVE"
         

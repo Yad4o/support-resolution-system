@@ -164,14 +164,19 @@ class ResponseGenerationService(BaseAIService):
         """
         def ai_generate(intent: str, message: str) -> Dict[str, Any]:
             # Simulate AI response generation (in real implementation, this would call an AI model)
-            responses = {
-                "login_issue": "I can help you with login issues. Please try resetting your password using the 'Forgot Password' link on the login page.",
-                "payment_issue": "I understand you're having payment issues. Let me escalate this to our billing team for immediate assistance.",
-                "general": "Thank you for contacting us. I'll help you resolve this issue as quickly as possible."
-            }
+            from app.services.response_generator import generate_response
+            
+            response_text, response_source = generate_response(
+                intent=intent,
+                original_message=message,
+                similar_solution=None,
+                sub_intent=None,
+                similar_quality_score=None
+            )
             
             return {
-                "response": responses.get(intent, responses["general"]),
+                "response": response_text,
+                "source": response_source,
                 "confidence": 0.85,
                 "escalate": intent == "payment_issue"
             }

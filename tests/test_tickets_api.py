@@ -254,7 +254,7 @@ class TestGetTicket:
         
         assert data["id"] == ticket_id
         assert data["message"] == "Test ticket"
-        assert data["status"] in ["auto_resolved", "escalated"]  # AI processed
+        assert data["status"] in ["auto_resolved", "escalated"]  # AI pipeline processes tickets
         assert "created_at" in data
 
     def test_get_ticket_not_found(self):

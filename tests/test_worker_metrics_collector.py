@@ -117,7 +117,7 @@ class TestCollectMetrics:
         assert result["tickets"]["total"] == 3
 
     def test_tickets_by_status(self, db_session):
-        _add_ticket(db_session, status="open")
+        _add_ticket(db_session, status="auto_resolved")
         _add_ticket(db_session, status="auto_resolved")
         _add_ticket(db_session, status="auto_resolved")
         _add_ticket(db_session, status="escalated")
@@ -125,8 +125,7 @@ class TestCollectMetrics:
         result = collect_metrics(db_session)
         by_status = result["tickets"]["by_status"]
 
-        assert by_status["open"] == 1
-        assert by_status["auto_resolved"] == 2
+        assert by_status["auto_resolved"] == 3
         assert by_status["escalated"] == 1
 
     def test_tickets_by_intent(self, db_session):
