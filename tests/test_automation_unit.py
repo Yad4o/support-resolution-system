@@ -363,7 +363,7 @@ class TestResponseGenerator:
     @patch('app.services.response_generator.generate_response')
     def test_generate_response_without_similar_solution(self, mock_generate):
         """Test response generation without similar solution."""
-        mock_generate.return_value = "Please double-check the email address you're signing in with — it's easy to mix up similar addresses. Also check for any accidental leading or trailing spaces in your password field. If you originally signed up via Google or another social provider, try that sign-in option instead of entering a password directly."
+        mock_generate.return_value = ("Please double-check the email address you're signing in with — it's easy to mix up similar addresses. Also check for any accidental leading or trailing spaces in your password field. If you originally signed up via Google or another social provider, try that sign-in option instead of entering a password directly.", "template")
         
         result = generate_response(
             intent="login_issue",
@@ -371,14 +371,18 @@ class TestResponseGenerator:
             similar_solution=None
         )
         
-        assert isinstance(result, str)
-        assert len(result) > 10
-        assert "login" not in result.lower() and "login" not in result
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        response_text, source_label = result
+        assert isinstance(response_text, str)
+        assert isinstance(source_label, str)
+        assert len(response_text) > 10
+        assert "login" not in response_text.lower() and "login" not in response_text
 
     @patch('app.services.response_generator.generate_response')
     def test_generate_response_unknown_intent(self, mock_generate):
         """Test response generation for unknown intent."""
-        mock_generate.return_value = "I understand you need help. A support agent will assist you shortly."
+        mock_generate.return_value = ("I understand you need help. A support agent will assist you shortly.", "template")
         
         result = generate_response(
             intent="unknown",
@@ -386,8 +390,12 @@ class TestResponseGenerator:
             similar_solution=None
         )
         
-        assert isinstance(result, str)
-        assert len(result) > 10
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        response_text, source_label = result
+        assert isinstance(response_text, str)
+        assert isinstance(source_label, str)
+        assert len(response_text) > 10
 
     @patch('app.services.response_generator.generate_response')
     def test_generate_response_error_handling(self, mock_generate):
@@ -401,8 +409,12 @@ class TestResponseGenerator:
         )
         
         # Should return safe fallback
-        assert isinstance(result, str)
-        assert len(result) > 0
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        response_text, source_label = result
+        assert isinstance(response_text, str)
+        assert isinstance(source_label, str)
+        assert len(response_text) > 0
 
     @patch('app.services.response_generator.generate_response')
     def test_generate_response_all_intents(self, mock_generate):
@@ -410,7 +422,7 @@ class TestResponseGenerator:
         intents = ["login_issue", "payment_issue", "account_issue", "technical_issue", "feature_request", "general_query"]
         
         for intent in intents:
-            mock_generate.return_value = f"Response for {intent}"
+            mock_generate.return_value = (f"Response for {intent}", "template")
             
             from app.services.response_generator import generate_response
             result = generate_response(
@@ -419,8 +431,12 @@ class TestResponseGenerator:
                 similar_solution=None
             )
             
-            assert intent in result
-            assert isinstance(result, str)
+            assert isinstance(result, tuple)
+            assert len(result) == 2
+            response_text, source_label = result
+            assert intent in response_text
+            assert isinstance(response_text, str)
+            assert isinstance(source_label, str)
 
 
 class TestTicketAutomation:

@@ -100,6 +100,12 @@ class Ticket(Base):
         doc="AI-generated response for auto-resolved tickets",
     )
 
+    response_source = Column(
+        String,
+        nullable=True,
+        doc="Which path generated the response: similarity, openai, template, or fallback",
+    )
+
     created_at = Column(
         DateTime,
         default=lambda: datetime.now(timezone.utc),

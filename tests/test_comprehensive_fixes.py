@@ -4,7 +4,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.services.response_generator import generate_response, _normalize_message, _match_keywords, _clean_similar_solution
+from app.services.response_generator import generate_response
 
 def test_response_generator_fixes():
     """Test all the nitpick fixes applied to response generator."""

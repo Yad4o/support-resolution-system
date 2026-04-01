@@ -106,7 +106,7 @@ class TestTicketLifecycle:
             "ticket": {"response": "Reset your password using the forgot password link."}
         }
         mock_decision.return_value = "AUTO_RESOLVE"
-        mock_response.return_value = "I understand you're experiencing a login issue. Based on a similar case, Reset your password using the forgot password link."
+        mock_response.return_value = ("I understand you're experiencing a login issue. Based on a similar case, Reset your password using the forgot password link.", "similarity")
         
         # Create resolved ticket for similarity search
         resolved_ticket = Ticket(

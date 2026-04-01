@@ -196,10 +196,14 @@ class TestRealAIImplementation:
         )
         
         assert response is not None
-        assert isinstance(response, str)
-        assert len(response) > 0
-        assert "Reset password" in response
-        assert "similar case" in response.lower()
+        assert isinstance(response, tuple)
+        assert len(response) == 2
+        response_text, source_label = response
+        assert isinstance(response_text, str)
+        assert isinstance(source_label, str)
+        assert len(response_text) > 0
+        assert "Reset password" in response_text
+        assert source_label == "similarity"
         
         # Test response without similar solution
         response = generate_response(
@@ -209,8 +213,12 @@ class TestRealAIImplementation:
         )
         
         assert response is not None
-        assert isinstance(response, str)
-        assert len(response) > 0
+        assert isinstance(response, tuple)
+        assert len(response) == 2
+        response_text, source_label = response
+        assert isinstance(response_text, str)
+        assert isinstance(source_label, str)
+        assert len(response_text) > 0
         
         # Test response for unknown intent
         response = generate_response(
@@ -220,7 +228,11 @@ class TestRealAIImplementation:
         )
         
         assert response is not None
-        assert isinstance(response, str)
+        assert isinstance(response, tuple)
+        assert len(response) == 2
+        response_text, source_label = response
+        assert isinstance(response_text, str)
+        assert isinstance(source_label, str)
         assert len(response) > 0
 
     def test_real_decision_engine(self):
@@ -265,7 +277,7 @@ class TestEndToEndScenarios:
             "ticket": {"response": "Reset your password using forgot password link"}
         }
         mock_decision.return_value = "AUTO_RESOLVE"
-        mock_response.return_value = "I understand you're experiencing a login issue. Based on a similar case, Reset your password using forgot password link"
+        mock_response.return_value = ("I understand you're experiencing a login issue. Based on a similar case, Reset your password using forgot password link", "similarity")
         
         # Create ticket
         response = client.post("/tickets/", json={"message": "I cannot login to my account"})
@@ -274,14 +286,14 @@ class TestEndToEndScenarios:
         ticket_data = response.json()
         
         # Verify complete flow
-        assert ticket_data["status"] == "auto_resolved"
+        assert ticket_data["status"] == "auto_resolved"  # Updated to match API output
         assert ticket_data["intent"] == "login_issue"
         assert ticket_data["confidence"] == 0.95  # Actual classifier confidence
         assert "Reset your password" in ticket_data["response"]
         
         # Verify database state
         db_ticket = db_session.query(Ticket).filter(Ticket.id == ticket_data["id"]).first()
-        assert db_ticket.status == "auto_resolved"
+        assert db_ticket.status == "auto_resolved"  # Updated to match API output
         assert db_ticket.intent == "login_issue"
 
     @patch('app.api.tickets.classify_intent')
@@ -422,7 +434,7 @@ class TestSystemIntegration:
             mock_classify.return_value = {"intent": "login_issue", "confidence": 0.95}
             mock_similarity.return_value = None
             mock_decision.return_value = "AUTO_RESOLVE"
-            mock_response.return_value = "Reset your password"
+            mock_response.return_value = ("Reset your password", "template")
             
             # Create ticket
             response = client.post("/tickets/", json={"message": "Database integration test"})

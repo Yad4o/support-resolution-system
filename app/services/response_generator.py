@@ -1,82 +1,100 @@
-from typing import Optional
+"""
+app/services/response_generator.py
+
+Purpose:
+--------
+Generates human-readable responses for customer support tickets.
+
+Owner:
+------
+Om (Backend / Response Generation)
+
+Responsibilities:
+-----------------
+- Generate responses based on intent and sub-intent
+- Handle similarity-based responses with quality scoring
+- Integrate OpenAI API with proper fallback chain
+- Ensure system never fails due to AI unavailability
+
+DO NOT:
+-------
+- Make decisions about ticket resolution
+- Update database directly
+- Access external APIs directly (except OpenAI)
+"""
+
+from typing import Optional, Tuple
 import re
 from app.core.config import settings
 
 
-def _normalize_message(message: str) -> str:
+def _call_openai(intent: str, sub_intent: Optional[str], message: str) -> Optional[str]:
     """
-    Apply stronger normalization to improve keyword matching accuracy.
+    Call OpenAI API to generate a response.
     
     Args:
-        message: Raw user message
+        intent: The classified intent
+        sub_intent: The sub-intent if available
+        message: Original customer message
         
     Returns:
-        str: Normalized message for accurate matching
+        str: Generated response or None if API call fails
     """
-    # Convert to lowercase
-    normalized = message.lower()
-    
-    # Strip and normalize punctuation (replace with spaces)
-    normalized = re.sub(r'[^\w\s]', ' ', normalized)
-    
-    # Normalize hyphens to spaces
-    normalized = normalized.replace('-', ' ')
-    
-    # Collapse multiple spaces to single space
-    normalized = re.sub(r'\s+', ' ', normalized)
-    
-    # Strip leading/trailing whitespace
-    normalized = normalized.strip()
-    
-    return normalized
+    try:
+        from openai import OpenAI
+        
+        client = OpenAI(
+            api_key=settings.OPENAI_API_KEY,
+            timeout=settings.OPENAI_TIMEOUT
+        )
+        
+        system_prompt = "You are a helpful customer support agent for a SaaS product. Write a clear, specific 2-3 sentence response to the customer. Give actionable steps. Do not use filler phrases like 'I understand your frustration'. Be direct and helpful."
+        
+        user_prompt = f"Intent: {intent}"
+        if sub_intent:
+            user_prompt += f"\nSub-intent: {sub_intent}"
+        user_prompt += f"\nCustomer message: {message}"
+        
+        response = client.chat.completions.create(
+            model=settings.OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            max_tokens=settings.OPENAI_MAX_TOKENS,
+            temperature=0.4
+        )
+        
+        return response.choices[0].message.content.strip()
+        
+    except Exception:
+        # Any exception with OpenAI should be silently handled
+        return None
 
 
-def _match_keywords(normalized_msg: str, keywords: list[str]) -> bool:
+def _select_template_with_sub_intent(intent: str, original_message: str, sub_intent: Optional[str]) -> Tuple[str, str]:
     """
-    Match keywords using word boundaries for more accurate matching.
+    Select the most relevant template with sub-intent support.
     
     Args:
-        normalized_msg: Normalized message
-        keywords: List of keywords to match
+        intent: The classified intent
+        original_message: The original user message
+        sub_intent: The sub-intent for more specific routing
         
     Returns:
-        bool: True if any keyword matches as a whole word/phrase
-    """
-    for keyword in keywords:
-        # Normalize keyword the same way
-        norm_keyword = keyword.lower().replace('-', ' ')
-        norm_keyword = re.sub(r'[^\w\s]', ' ', norm_keyword)
-        norm_keyword = re.sub(r'\s+', ' ', norm_keyword).strip()
-        
-        # Use word boundary matching for single words
-        if ' ' not in norm_keyword:
-            pattern = r'\b' + re.escape(norm_keyword) + r'\b'
-            if re.search(pattern, normalized_msg):
-                return True
-        # For phrases, use substring matching on normalized text
-        else:
-            if norm_keyword in normalized_msg:
-                return True
-    
-    return False
-
-
-def _select_template(intent: str, message: str) -> str:
-    """
-    Select the most relevant template index for a given intent and message.
-
-    Args:
-        intent: The classified intent string.
-        message: The raw user message (will be normalized internally).
-
-    Returns:
-        str: The selected response template text.
+        Tuple[str, str]: (template_text, "template")
     """
     if intent not in response_templates:
-        return "I've received your message and will do my best to assist you."
+        return "I've received your message and will do my best to assist you.", "template"
 
     # Apply stronger normalization
-    normalized_msg = _normalize_message(message)
+    normalized_msg = _normalize_message(original_message)
+
+    # Check for sub-intent specific routing first
+    if sub_intent and sub_intent in _sub_intent_to_index:
+        template_index = _sub_intent_to_index[sub_intent]
+        if template_index < len(response_templates[intent]):
+            return response_templates[intent][template_index], "template"
 
     # Reordered keyword rules: specific billing/security keywords first
     keyword_rules = {
@@ -111,123 +129,108 @@ def _select_template(intent: str, message: str) -> str:
     rules = keyword_rules.get(intent, [])
     for keywords, template_index in rules:
         if _match_keywords(normalized_msg, keywords):
-            return response_templates[intent][template_index]
+            return response_templates[intent][template_index], "template"
 
     # Default: last template
-    return response_templates[intent][-1]
+    return response_templates[intent][-1], "template"
 
 
-def _clean_similar_solution(solution: str) -> str:
+def generate_response(intent: str, original_message: str, similar_solution: Optional[str] = None, 
+                        sub_intent: Optional[str] = None, similar_quality_score: Optional[float] = None) -> Tuple[str, str]:
     """
-    Clean and normalize a similar solution to prevent wrapper nesting and limit length.
+    Generate a human-readable response based on intent, message, and available solutions.
     
-    Args:
-        solution: Raw similar solution text
-        
-    Returns:
-        str: Cleaned, bounded, and normalized solution
-    """
-    # Detect and remove existing wrapper prefixes - loop to remove all matches
-    wrapper_prefixes = [
-        "I understand you're experiencing an issue. Based on a similar case, here's what helped:",
-        "Based on a similar case, here's what helped:",
-        "Here's what helped in a similar case:",
-        "Similar case solution:",
-    ]
+    This function implements a robust fallback chain:
+    1. Similar solution (if high quality)
+    2. OpenAI API (if configured)
+    3. Template-based response
+    4. Hardcoded fallback
     
-    cleaned = solution.strip()
-    # Keep removing prefixes until none match
-    while True:
-        found_prefix = False
-        for prefix in wrapper_prefixes:
-            if cleaned.lower().startswith(prefix.lower()):
-                # Remove prefix and any following whitespace/colon
-                remainder = cleaned[len(prefix):]
-                # Explicitly check for and remove exact delimiter sequence
-                if remainder.startswith(': '):
-                    remainder = remainder[2:]
-                elif remainder.startswith(':'):
-                    remainder = remainder[1:]
-                cleaned = remainder.strip()
-                found_prefix = True
-                break
-        if not found_prefix:
-            break  # No more prefixes to remove
-    
-    # Normalize whitespace
-    cleaned = re.sub(r'\s+', ' ', cleaned)
-    
-    # Limit to safe maximum length (1000 chars)
-    if len(cleaned) > 1000:
-        cleaned = cleaned[:1000].rstrip()
-        # Try to end at a sentence boundary
-        last_period = cleaned.rfind('.')
-        last_exclamation = cleaned.rfind('!')
-        last_question = cleaned.rfind('?')
-        
-        last_sentence_end = max(last_period, last_exclamation, last_question)
-        if last_sentence_end > 800:  # Only truncate if we have substantial content
-            cleaned = cleaned[:last_sentence_end + 1]
-        else:
-            cleaned += '...'  # Indicate truncation
-    
-    return cleaned
-
-_sub_intent_to_index: dict[str, int] = {
-    "password_reset":    0,
-    "account_locked":    1,
-    "wrong_credentials": 2,
-    "duplicate_charge":  0,
-    "payment_declined":  1,
-    "billing_question":  2,
-    "delete_account":    0,
-    "update_info":       1,
-    "crash_error":       0,
-    "performance":       1,
-    "new_feature":       0,
-    "improvement":       1,
-    "how_to":            0,
-    "pricing_plan":      1,
-}
-
-
-def generate_response(intent: str, original_message: str, similar_solution: Optional[str] = None, sub_intent: Optional[str] = None) -> str:
-    """
-    Generate a human-readable response based on intent, original message, and similar solution.
-
-    This component only returns text; it does not update database or make decisions.
-    Reference: Technical Spec § 9.3 (Response Generation)
-
     Args:
         intent: The classified intent (e.g., 'login_issue', 'payment_issue')
         original_message: The original user message for context
-        similar_solution: Optional solution from a similar resolved ticket to reuse.
-                          NOTE: This parameter is processed by _clean_similar_solution
-                          which performs prefix stripping, normalization, and length bounding.
-                          Callers should still sanitize/validate if stronger guarantees are needed.
-
+        similar_solution: Optional solution from a similar resolved ticket
+        sub_intent: Optional sub-intent for more specific routing
+        similar_quality_score: Optional quality score (0.0-1.0) for similar solution
+        
     Returns:
-        str: Generated response text
+        Tuple[str, str]: (response_text, source_label)
+        source_label is one of: "similarity", "openai", "template", "fallback"
     """
+    
+    # Priority 1: Similar solution with quality threshold
+    if similar_solution and similar_solution.strip() and (similar_quality_score is None or similar_quality_score >= 0.6):
+        # Sanitize to 500 chars to prevent overly long responses
+        sanitized_solution = similar_solution.strip()[:500]
+        return f"I understand you're experiencing an issue. Based on a similar case, here's what helped: {sanitized_solution}", "similarity"
+    
+    # Priority 2: OpenAI API
+    if settings.AI_PROVIDER == "openai" and settings.OPENAI_API_KEY:
+        openai_response = _call_openai(intent, sub_intent, original_message)
+        if openai_response:
+            return openai_response, "openai"
+        # If OpenAI fails, silently continue to next priority
+    
+    # Priority 3: Template-based response
+    template_response, _ = _select_template_with_sub_intent(intent, original_message, sub_intent)
+    return template_response, "template"
+    
+    # Note: We should never reach here due to template fallback
+    # But if we do, return hardcoded fallback
+    return "I've received your message and will do my best to assist you.", "fallback"
 
-    # Priority 1: Reuse similar solution if provided
-    # NOTE: similar_solution is processed by _clean_similar_solution for safety
-    if similar_solution and similar_solution.strip():
-        cleaned_solution = _clean_similar_solution(similar_solution)
-        return f"I understand you're experiencing an issue. Based on a similar case, here's what helped: {cleaned_solution}"
-
-    # Priority 2: sub_intent fast-path — skip keyword detection entirely
-    if sub_intent is not None:
-        idx = _sub_intent_to_index.get(sub_intent)
-        if idx is not None and intent in response_templates:
-            templates = response_templates[intent]
-            return templates[min(idx, len(templates) - 1)]
-
-    # Priority 3: Intent-based static templates — delegate to keyword selector
-    return _select_template(intent, original_message)
 
 # ---------------------------------------------------------------------------
-# Response templates — each entry addresses a distinct sub-problem
+# Helper functions (unchanged from original)
+# ---------------------------------------------------------------------------
+
+def _normalize_message(message: str) -> str:
+    """
+    Apply stronger normalization to improve keyword matching accuracy.
+    """
+    # Convert to lowercase
+    normalized = message.lower()
+    
+    # Strip and normalize punctuation (replace with spaces)
+    normalized = re.sub(r'[^\w\s]', ' ', normalized)
+    
+    # Normalize hyphens to spaces
+    normalized = normalized.replace('-', ' ')
+    
+    # Collapse multiple spaces to single space
+    normalized = re.sub(r'\s+', ' ', normalized)
+    
+    # Strip leading/trailing whitespace
+    normalized = normalized.strip()
+    
+    return normalized
+
+
+def _match_keywords(normalized_msg: str, keywords: list[str]) -> bool:
+    """
+    Match keywords using word boundaries for more accurate matching.
+    """
+    for keyword in keywords:
+        # Normalize keyword the same way
+        norm_keyword = keyword.lower().replace('-', ' ')
+        norm_keyword = re.sub(r'[^\w\s]', ' ', norm_keyword)
+        norm_keyword = re.sub(r'\s+', ' ', norm_keyword).strip()
+        
+        # Use word boundary matching for single words
+        if ' ' not in norm_keyword:
+            pattern = r'\b' + re.escape(norm_keyword) + r'\b'
+            if re.search(pattern, normalized_msg):
+                return True
+        # For phrases, use substring matching on normalized text
+        else:
+            if norm_keyword in normalized_msg:
+                return True
+    
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Response templates (unchanged from original)
 # ---------------------------------------------------------------------------
 
 response_templates = {
@@ -337,4 +340,22 @@ response_templates = {
         f"You can reach our support team by emailing {settings.SUPPORT_EMAIL} or using the live chat in "
         "the bottom-right corner of the app. Live chat is available Monday-Friday, 9 am-6 pm UTC.",
     ],
+}
+
+# Sub-intent to template index mapping for more specific routing
+_sub_intent_to_index: dict[str, int] = {
+    "password_reset":    0,
+    "account_locked":    1,
+    "wrong_credentials": 2,
+    "duplicate_charge": 0,
+    "payment_declined": 1,
+    "billing_question": 2,
+    "delete_account":    0,
+    "update_info":       1,
+    "crash_error":       0,
+    "performance":       1,
+    "new_feature":       0,
+    "improvement":       1,
+    "how_to":            0,
+    "pricing_plan":      1,
 }

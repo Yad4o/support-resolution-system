@@ -100,15 +100,18 @@ def _run_ticket_automation(ticket: Ticket, db: Session) -> Ticket:
         similar_solution = (
             similar_result["ticket"]["response"] if similar_result else None
         )
-        ticket.response = generate_response(
+        response_text, response_source = generate_response(
             intent,
             ticket.message,
             similar_solution=similar_solution,
             sub_intent=sub_intent,
+            similar_quality_score=None,  # Will be wired in Task 5
         )
-        ticket.status = "auto_resolved"
+        ticket.response = response_text
+        ticket.response_source = response_source
+        ticket.status = "auto_resolved" if decision == "AUTO_RESOLVE" else "escalated"
         logger.info(
-            f"Ticket {ticket.id} auto-resolved with intent {intent} "
+            f"Ticket {ticket.id} {decision.lower()} with intent {intent} "
             f"(confidence: {confidence})"
         )
     else:  # ESCALATE

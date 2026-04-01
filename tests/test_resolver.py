@@ -3,13 +3,17 @@ from app.services.response_generator import generate_response
 
 def test_resolver_returns_string():
     """
-    Response generator must always return a string.
+    Response generator must always return a tuple (response_text, source_label).
     """
     response = generate_response(
         intent="login_issue",
         original_message="Cannot login"
     )
-    assert isinstance(response, str)
+    assert isinstance(response, tuple)
+    assert len(response) == 2
+    response_text, source_label = response
+    assert isinstance(response_text, str)
+    assert isinstance(source_label, str)
 
 
 def test_resolver_uses_similar_solution():
@@ -21,9 +25,11 @@ def test_resolver_uses_similar_solution():
         original_message="Cannot login",
         similar_solution="Reset your password"
     )
-    assert "I understand you're experiencing an issue" in response
-    assert "Based on a similar case" in response
-    assert "Reset your password" in response
+    response_text, source_label = response
+    assert "I understand you're experiencing an issue" in response_text
+    assert "Based on a similar case" in response_text
+    assert "Reset your password" in response_text
+    assert source_label == "similarity"
 
 
 def test_resolver_fallback_response():
@@ -34,5 +40,9 @@ def test_resolver_fallback_response():
         intent="unknown",
         original_message="Something wrong"
     )
-    assert isinstance(response, str)
-    assert len(response) > 0
+    response_text, source_label = response
+    assert isinstance(response, tuple)
+    assert len(response) == 2
+    assert isinstance(response_text, str)
+    assert isinstance(source_label, str)
+    assert len(response_text) > 0
