@@ -136,6 +136,52 @@ def _select_template_with_sub_intent(intent: str, original_message: str, sub_int
     return response_templates[intent][-1], "template"
 
 
+def _sanitize_similar_solution(solution: str) -> str:
+    """
+    Sanitize similar solution to remove customer-specific data and PII.
+    
+    Args:
+        solution: Original solution text from previous ticket
+        
+    Returns:
+        str: Sanitized solution safe for reuse
+    """
+    import re
+    
+    # Remove common PII patterns
+    patterns_to_redact = [
+        r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',  # Email addresses
+        r'\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b',  # Credit card numbers
+        r'\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b',  # SSN patterns
+        r'\b(?:\+?1[-.\s]?)?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}\b',  # Phone numbers
+        r'ticket\s*#?\d+',  # Ticket numbers
+        r'case\s*#?\d+',  # Case numbers
+        r'order\s*#?\d+',  # Order numbers
+        r'account\s*#?\d+',  # Account numbers
+        r'invoice\s*#?\d+',  # Invoice numbers
+    ]
+    
+    sanitized = solution
+    for pattern in patterns_to_redact:
+        sanitized = re.sub(pattern, '[REDACTED]', sanitized, flags=re.IGNORECASE)
+    
+    # Remove specific customer references (but keep technical terms)
+    customer_refs = [
+        r'your\s+email\s+address',
+        r'your\s+profile',
+        r'your\s+subscription',
+        r'your\s+billing\s+information',
+        r'your\s+payment\s+method',
+        r'your\s+personal\s+information',
+    ]
+    
+    for ref in customer_refs:
+        sanitized = re.sub(ref, 'the account', sanitized, flags=re.IGNORECASE)
+    
+    # Limit length and strip
+    return sanitized.strip()[:500]
+
+
 def generate_response(intent: str, original_message: str, similar_solution: Optional[str] = None, 
                         sub_intent: Optional[str] = None, similar_quality_score: Optional[float] = None) -> Tuple[str, str]:
     """
@@ -161,8 +207,8 @@ def generate_response(intent: str, original_message: str, similar_solution: Opti
     
     # Priority 1: Similar solution with quality threshold
     if similar_solution and similar_solution.strip() and (similar_quality_score is None or similar_quality_score >= 0.6):
-        # Sanitize to 500 chars to prevent overly long responses
-        sanitized_solution = similar_solution.strip()[:500]
+        # Sanitize solution to remove PII and customer-specific data
+        sanitized_solution = _sanitize_similar_solution(similar_solution)
         return f"I understand you're experiencing an issue. Based on a similar case, here's what helped: {sanitized_solution}", "similarity"
     
     # Priority 2: OpenAI API

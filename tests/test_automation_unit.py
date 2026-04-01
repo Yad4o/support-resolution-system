@@ -367,6 +367,7 @@ class TestResponseGenerator:
         """Test response generation without similar solution."""
         mock_generate.return_value = ("Please double-check the email address you're signing in with — it's easy to mix up similar addresses. Also check for any accidental leading or trailing spaces in your password field. If you originally signed up via Google or another social provider, try that sign-in option instead of entering a password directly.", "template")
         
+        from app.services.response_generator import generate_response
         result = generate_response(
             intent="login_issue",
             original_message="Cannot login",
@@ -386,6 +387,7 @@ class TestResponseGenerator:
         """Test response generation for unknown intent."""
         mock_generate.return_value = ("I understand you need help. A support agent will assist you shortly.", "template")
         
+        from app.services.response_generator import generate_response
         result = generate_response(
             intent="unknown",
             original_message="Random text",
