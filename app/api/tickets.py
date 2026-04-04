@@ -22,7 +22,6 @@ DO NOT:
 - Access external APIs directly here
 """
 
-from jose import JWTError
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import OAuth2PasswordBearer
@@ -180,7 +179,8 @@ def create_ticket(
                 sub = payload.get("sub")
                 if sub:
                     user_id = int(sub)
-            except Exception:
+            except Exception as e:
+                logger.debug("Token decode failed — treating as unauthenticated", exc_info=True)
                 pass  # Invalid token — treat as unauthenticated
 
         # Step 1: Create ticket with initial status
@@ -263,7 +263,8 @@ def list_tickets(
                 if sub:
                     user_id = int(sub)
                     user_role = payload.get("role")
-            except Exception:
+            except Exception as e:
+                logger.debug("Failed to decode token, showing all tickets", exc_info=True)
                 pass  # Invalid token — show all tickets
 
         # Build query

@@ -46,6 +46,9 @@ def client_with_temp_db(temp_db):
     # Create a db session for tests to use directly
     db = TestingSessionLocal()
     
+    # Save the original override before setting our own
+    original_override = app.dependency_overrides.get(get_db)
+    
     def override_get_db():
         # Create a new session per request
         request_db = TestingSessionLocal()
@@ -59,13 +62,19 @@ def client_with_temp_db(temp_db):
     try:
         yield client, db  # Yield both client and db session for test use
     finally:
-        app.dependency_overrides.clear()
+        # Restore original override instead of clearing all
+        if original_override is not None:
+            app.dependency_overrides[get_db] = original_override
+        else:
+            app.dependency_overrides.pop(get_db, None)
         db.close()
+        # Dispose the engine to ensure SQLite connections are fully closed
+        engine.dispose()
 
 
-def test_create_ticket_without_token(client_with_temp_db, temp_db):
+def test_create_ticket_without_token(client_with_temp_db):
     """Test POST /tickets without token creates ticket with user_id=None."""
-    client, _ = client_with_temp_db
+    client, db = client_with_temp_db
     
     # Create ticket without authentication
     response = client.post("/tickets/", json={"message": "I need help with login"})
@@ -74,15 +83,9 @@ def test_create_ticket_without_token(client_with_temp_db, temp_db):
     ticket_data = response.json()
     assert ticket_data["user_id"] is None
     
-    # Verify in database
-    engine = create_engine(f"sqlite:///{temp_db}")
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    Base.metadata.create_all(bind=engine)
-    db = TestingSessionLocal()
-    
+    # Verify in database using the shared fixture-provided db session
     ticket = db.query(Ticket).filter(Ticket.id == ticket_data["id"]).first()
     assert ticket.user_id is None
-    db.close()
 
 
 def test_create_ticket_with_valid_token(client_with_temp_db, temp_db):
