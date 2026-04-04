@@ -17,7 +17,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, inspect
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -36,9 +36,9 @@ def add_is_archived_column() -> bool:
         engine = create_engine(settings.DATABASE_URL)
 
         with engine.connect() as conn:
-            # Check if column already exists (SQLite-compatible introspection)
-            result = conn.execute(text("PRAGMA table_info(tickets)"))
-            columns = [row[1] for row in result.fetchall()]
+            # Check if column already exists using dialect-agnostic introspection
+            inspector = inspect(engine)
+            columns = [col['name'] for col in inspector.get_columns("tickets")]
 
             if "is_archived" in columns:
                 logger.info("is_archived column already exists in tickets table")

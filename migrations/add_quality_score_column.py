@@ -16,7 +16,8 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, inspect
+from sqlalchemy.exc import SQLAlchemyError
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -35,9 +36,9 @@ def add_quality_score_column() -> bool:
         engine = create_engine(settings.DATABASE_URL)
 
         with engine.connect() as conn:
-            # Check if column already exists (SQLite-compatible introspection)
-            result = conn.execute(text("PRAGMA table_info(tickets)"))
-            columns = [row[1] for row in result.fetchall()]
+            # Check if column already exists using dialect-agnostic introspection
+            inspector = inspect(engine)
+            columns = [col['name'] for col in inspector.get_columns("tickets")]
 
             if "quality_score" in columns:
                 logger.info("quality_score column already exists in tickets table")
@@ -50,8 +51,11 @@ def add_quality_score_column() -> bool:
             logger.info("Successfully added quality_score column to tickets table")
             return True
 
+    except SQLAlchemyError as e:
+        logger.exception("Failed to add quality_score column (DB error): %s", e)
+        return False
     except Exception as e:
-        logger.error("Failed to add quality_score column: %s", e)
+        logger.exception("Unexpected error adding quality_score column: %s", e)
         return False
 
 
