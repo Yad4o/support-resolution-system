@@ -89,13 +89,9 @@ def test_create_ticket_with_valid_token(client_with_temp_db, temp_db):
     """Test POST /tickets with valid token creates ticket with correct user_id."""
     from app.api.auth import create_access_token
     
-    client, _ = client_with_temp_db
+    client, db = client_with_temp_db
     
     # Create a test user in the same database
-    engine = create_engine(f"sqlite:///{temp_db}")
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    db = TestingSessionLocal()
-    
     user = User(
         email="test@example.com",
         hashed_password="hashed_password",
@@ -104,7 +100,6 @@ def test_create_ticket_with_valid_token(client_with_temp_db, temp_db):
     db.add(user)
     db.commit()
     db.refresh(user)
-    db.close()
     
     # Create token for the user
     token = create_access_token(data={"sub": str(user.id), "role": "user"})
@@ -117,24 +112,18 @@ def test_create_ticket_with_valid_token(client_with_temp_db, temp_db):
     ticket_data = response.json()
     assert ticket_data["user_id"] == user.id
     
-    # Verify in database
-    db = TestingSessionLocal()
+    # Verify in database using the shared session
     ticket = db.query(Ticket).filter(Ticket.id == ticket_data["id"]).first()
     assert ticket.user_id == user.id
-    db.close()
 
 
 def test_list_tickets_user_token_filters_by_user(client_with_temp_db, temp_db):
     """Test GET /tickets with user token only returns that user's tickets."""
     from app.api.auth import create_access_token
     
-    client, _ = client_with_temp_db
+    client, db = client_with_temp_db
     
     # Create two test users in the same database
-    engine = create_engine(f"sqlite:///{temp_db}")
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    db = TestingSessionLocal()
-    
     user1 = User(
         email="user1@example.com",
         hashed_password="hashed_password",
@@ -151,7 +140,7 @@ def test_list_tickets_user_token_filters_by_user(client_with_temp_db, temp_db):
     db.refresh(user1)
     db.refresh(user2)
     
-    # Store user IDs before closing session
+    # Store user IDs
     user1_id = user1.id
     user2_id = user2.id
     
@@ -164,7 +153,6 @@ def test_list_tickets_user_token_filters_by_user(client_with_temp_db, temp_db):
     db.add(ticket2)
     db.add(ticket3)
     db.commit()
-    db.close()
     
     # Create token for user1
     token = create_access_token(data={"sub": str(user1_id), "role": "user"})
@@ -184,13 +172,9 @@ def test_list_tickets_admin_token_returns_all_tickets(client_with_temp_db, temp_
     """Test GET /tickets with admin token returns all tickets."""
     from app.api.auth import create_access_token
     
-    client, _ = client_with_temp_db
+    client, db = client_with_temp_db
     
     # Create users in the same database
-    engine = create_engine(f"sqlite:///{temp_db}")
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    db = TestingSessionLocal()
-    
     admin_user = User(
         email="admin@example.com",
         hashed_password="hashed_password",
@@ -207,7 +191,7 @@ def test_list_tickets_admin_token_returns_all_tickets(client_with_temp_db, temp_
     db.refresh(admin_user)
     db.refresh(regular_user)
     
-    # Store user IDs before closing session
+    # Store user IDs
     admin_user_id = admin_user.id
     regular_user_id = regular_user.id
     
@@ -220,7 +204,6 @@ def test_list_tickets_admin_token_returns_all_tickets(client_with_temp_db, temp_
     db.add(ticket2)
     db.add(ticket3)
     db.commit()
-    db.close()
     
     # Create token for admin
     token = create_access_token(data={"sub": str(admin_user_id), "role": "admin"})
@@ -309,3 +292,74 @@ def test_list_tickets_without_token_returns_all_tickets(client_with_temp_db, tem
     
     tickets_data = response.json()
     assert len(tickets_data["tickets"]) == 2  # All tickets returned
+
+
+def test_create_ticket_with_invalid_token_returns_201_as_anonymous(client_with_temp_db):
+    """Test POST /tickets with invalid token treats as unauthenticated (returns 201)."""
+    client, _ = client_with_temp_db
+    
+    # Test with malformed token - should be treated as unauthenticated
+    headers = {"Authorization": "Bearer invalid.token.here"}
+    response = client.post("/tickets/", json={"message": "I need help"}, headers=headers)
+    
+    # Should return 201 Created (treated as anonymous)
+    assert response.status_code == 201
+    assert response.json()["user_id"] is None  # No ownership assigned
+
+
+def test_list_tickets_with_invalid_token_returns_200_as_anonymous(client_with_temp_db):
+    """Test GET /tickets with invalid token treats as unauthenticated (returns 200)."""
+    client, _ = client_with_temp_db
+    
+    # Test with malformed token - should be treated as unauthenticated
+    headers = {"Authorization": "Bearer invalid.token.here"}
+    response = client.get("/tickets/", headers=headers)
+    
+    # Should return 200 OK (treated as anonymous - shows all tickets)
+    assert response.status_code == 200
+
+
+def test_requests_with_expired_token_returns_success_as_anonymous(client_with_temp_db):
+    """Test that expired tokens are treated as unauthenticated (return success)."""
+    from app.api.auth import create_access_token
+    from datetime import timedelta
+    
+    client, _ = client_with_temp_db
+    
+    # Create an expired token
+    expired_token = create_access_token(
+        data={"sub": "999", "role": "user"},
+        expires_delta=timedelta(minutes=-1)  # Expired 1 minute ago
+    )
+    
+    headers = {"Authorization": f"Bearer {expired_token}"}
+    
+    # Test POST /tickets/ - should succeed as anonymous
+    response = client.post("/tickets/", json={"message": "I need help"}, headers=headers)
+    assert response.status_code == 201
+    assert response.json()["user_id"] is None
+    
+    # Test GET /tickets/ - should succeed as anonymous
+    response = client.get("/tickets/", headers=headers)
+    assert response.status_code == 200
+
+
+def test_requests_with_missing_sub_returns_success_as_anonymous(client_with_temp_db):
+    """Test that tokens without 'sub' claim are treated as unauthenticated."""
+    from app.api.auth import create_access_token
+    
+    client, _ = client_with_temp_db
+    
+    # Create a token without 'sub' claim (only role)
+    token_no_sub = create_access_token(data={"role": "user"})
+    
+    headers = {"Authorization": f"Bearer {token_no_sub}"}
+    
+    # Test POST /tickets/ - should succeed as anonymous
+    response = client.post("/tickets/", json={"message": "I need help"}, headers=headers)
+    assert response.status_code == 201
+    assert response.json()["user_id"] is None
+    
+    # Test GET /tickets/ - should succeed as anonymous
+    response = client.get("/tickets/", headers=headers)
+    assert response.status_code == 200

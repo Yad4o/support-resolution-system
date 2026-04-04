@@ -22,6 +22,7 @@ DO NOT:
 - Access external APIs directly here
 """
 
+from jose import JWTError
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import OAuth2PasswordBearer
@@ -176,27 +177,11 @@ def create_ticket(
         if token:
             try:
                 payload = decode_token(token)
-                # Reject tokens without a valid subject claim
                 sub = payload.get("sub")
-                if not sub:
-                    raise ValueError("Token missing subject claim")
-                user_id = int(sub)
-            except Exception as e:
-                logger.error(f"Invalid token provided: {e}")
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid or expired authentication token"
-                ) from None
-
-        # Verify user exists if user_id is provided (token auth)
-        if user_id is not None:
-            from app.models.user import User
-            user_exists = db.query(User).filter(User.id == user_id).first()
-            if not user_exists:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid authentication token"
-                ) from None
+                if sub:
+                    user_id = int(sub)
+            except Exception:
+                pass  # Invalid token — treat as unauthenticated
 
         # Step 1: Create ticket with initial status
         ticket = Ticket(
@@ -274,18 +259,12 @@ def list_tickets(
         if token:
             try:
                 payload = decode_token(token)
-                # Reject tokens without a valid subject claim
                 sub = payload.get("sub")
-                if not sub:
-                    raise ValueError("Token missing subject claim")
-                user_id = int(sub)
-                user_role = payload.get("role")
-            except Exception as e:
-                logger.error(f"Invalid token provided: {e}")
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid or expired authentication token"
-                ) from None
+                if sub:
+                    user_id = int(sub)
+                    user_role = payload.get("role")
+            except Exception:
+                pass  # Invalid token — show all tickets
 
         # Build query
         query = db.query(Ticket)
