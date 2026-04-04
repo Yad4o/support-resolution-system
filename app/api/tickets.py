@@ -176,7 +176,11 @@ def create_ticket(
         if token:
             try:
                 payload = decode_token(token)
-                user_id = int(payload.get("sub") or 0) or None
+                # Reject tokens without a valid subject claim
+                sub = payload.get("sub")
+                if not sub:
+                    raise ValueError("Token missing subject claim")
+                user_id = int(sub)
             except Exception as e:
                 logger.error(f"Invalid token provided: {e}")
                 raise HTTPException(
@@ -218,6 +222,9 @@ def create_ticket(
         
         return TicketResponse.model_validate(ticket)
         
+    except HTTPException:
+        # Re-raise HTTP exceptions (including 401 from token validation)
+        raise
     except Exception as e:
         db.rollback()
         logger.exception("Failed to create ticket")
@@ -257,7 +264,11 @@ def list_tickets(
         if token:
             try:
                 payload = decode_token(token)
-                user_id = int(payload.get("sub") or 0) or None
+                # Reject tokens without a valid subject claim
+                sub = payload.get("sub")
+                if not sub:
+                    raise ValueError("Token missing subject claim")
+                user_id = int(sub)
                 user_role = payload.get("role")
             except Exception as e:
                 logger.error(f"Invalid token provided: {e}")
@@ -285,6 +296,9 @@ def list_tickets(
         
         return TicketList(tickets=ticket_responses)
         
+    except HTTPException:
+        # Re-raise HTTP exceptions (including 401 from token validation)
+        raise
     except Exception as e:
         logger.exception("Failed to retrieve tickets")
         raise HTTPException(

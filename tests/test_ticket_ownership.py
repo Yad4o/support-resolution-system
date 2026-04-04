@@ -49,23 +49,28 @@ def db_session(temp_db):
 @pytest.fixture(scope="function")
 def client_with_temp_db(temp_db):
     """Create test client with temporary database."""
-    engine = create_engine(f"sqlite:///{temp_db}")
+    engine = create_engine(
+        f"sqlite:///{temp_db}",
+        connect_args={"check_same_thread": False}
+    )
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     Base.metadata.create_all(bind=engine)
     
-    # Create a single db session for the test to use
+    # Create a db session for tests to use directly
     db = TestingSessionLocal()
     
     def override_get_db():
+        # Create a new session per request
+        request_db = TestingSessionLocal()
         try:
-            yield db
+            yield request_db
         finally:
-            pass  # Don't close here, test will close it
+            request_db.close()
     
     app.dependency_overrides[get_db] = override_get_db
     client = TestClient(app)
     try:
-        yield client, db  # Yield both client and db session
+        yield client, db  # Yield both client and db session for test use
     finally:
         app.dependency_overrides.clear()
         db.close()
@@ -293,8 +298,18 @@ def test_list_tickets_without_token_returns_all_tickets(client_with_temp_db, tem
     """Test GET /tickets without token returns all tickets (unauthenticated access)."""
     client, db = client_with_temp_db
     
+    # Create a user for the first ticket
+    user = User(
+        email="ticketowner@example.com",
+        hashed_password="hashed_password",
+        role="user"
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    
     # Create tickets directly in database (use the shared session)
-    ticket1 = Ticket(message="Ticket 1", user_id=1)
+    ticket1 = Ticket(message="Ticket 1", user_id=user.id)
     ticket2 = Ticket(message="Ticket 2", user_id=None)
     
     db.add(ticket1)
