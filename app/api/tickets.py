@@ -34,6 +34,7 @@ from app.schemas.ticket import (
     TicketList,
 )
 from app.models.ticket import Ticket
+from app.models.user import User
 from app.services.classifier import classify_intent
 from app.services.response_generator import generate_response
 from app.db.session import get_db
@@ -41,7 +42,7 @@ from app.core.config import settings
 from fastapi import status
 from app.services.similarity_search import find_similar_ticket
 from app.services.decision_engine import decide_resolution
-from app.api.auth import decode_token
+from app.api.auth import decode_token, get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/tickets", tags=["Tickets"])
@@ -355,6 +356,141 @@ def get_ticket(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error occurred while retrieving ticket"
+        )
+
+
+def require_agent_or_admin(current_user: User = Depends(get_current_user)) -> User:
+    """
+    Dependency to ensure current user has agent or admin role.
+    
+    Args:
+        current_user: Current authenticated user from JWT token
+        
+    Returns:
+        Current user if agent or admin
+        
+    Raises:
+        HTTPException: 403 if user is not agent or admin
+    """
+    if current_user.role not in ["agent", "admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. Agent or admin role required."
+        )
+    return current_user
+
+
+@router.post("/{ticket_id}/assign", response_model=TicketResponse)
+def assign_ticket(
+    ticket_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_agent_or_admin)
+) -> TicketResponse:
+    """
+    Assign an escalated ticket to the current agent/admin.
+    
+    Args:
+        ticket_id: ID of the ticket to assign
+        db: Database session dependency
+        current_user: Current authenticated agent/admin user
+        
+    Returns:
+        TicketResponse: The updated ticket with assigned agent
+        
+    Raises:
+        HTTPException: 404 if ticket not found, 400 if not escalated, 403 if not agent/admin
+    """
+    try:
+        # Fetch ticket by ID
+        ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+        
+        if not ticket:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Ticket with ID {ticket_id} not found"
+            )
+        
+        # Only escalated tickets can be assigned
+        if ticket.status != "escalated":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only escalated tickets can be assigned"
+            )
+        
+        # Assign ticket to current user
+        ticket.assigned_agent_id = current_user.id
+        
+        db.commit()
+        db.refresh(ticket)
+        
+        logger.info(f"Ticket {ticket_id} assigned to user {current_user.id}")
+        return TicketResponse.model_validate(ticket)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"Failed to assign ticket {ticket_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error occurred while assigning ticket"
+        )
+
+
+@router.post("/{ticket_id}/close", response_model=TicketResponse)
+def close_ticket(
+    ticket_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_agent_or_admin)
+) -> TicketResponse:
+    """
+    Close an escalated or auto_resolved ticket.
+    
+    Args:
+        ticket_id: ID of the ticket to close
+        db: Database session dependency
+        current_user: Current authenticated agent/admin user
+        
+    Returns:
+        TicketResponse: The updated closed ticket
+        
+    Raises:
+        HTTPException: 404 if ticket not found, 400 if status not allowed, 403 if not agent/admin
+    """
+    try:
+        # Fetch ticket by ID
+        ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+        
+        if not ticket:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Ticket with ID {ticket_id} not found"
+            )
+        
+        # Only escalated or auto_resolved tickets can be closed
+        if ticket.status not in ("escalated", "auto_resolved"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only escalated or auto_resolved tickets can be closed"
+            )
+        
+        # Close the ticket
+        ticket.status = "closed"
+        
+        db.commit()
+        db.refresh(ticket)
+        
+        logger.info(f"Ticket {ticket_id} closed by user {current_user.id}")
+        return TicketResponse.model_validate(ticket)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"Failed to close ticket {ticket_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error occurred while closing ticket"
         )
 
 
