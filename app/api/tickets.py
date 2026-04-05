@@ -379,7 +379,7 @@ def assign_ticket(
         TicketResponse: The updated ticket with assigned agent
         
     Raises:
-        HTTPException: 404 if ticket not found, 400 if not escalated, 403 if not agent/admin
+        HTTPException: 404 if ticket not found, 409 if state transition conflict, 403 if not agent/admin
     """
     try:
         # Atomic UPDATE is the ONLY gate - no pre-fetch to avoid TOCTOU race
@@ -416,9 +416,15 @@ def assign_ticket(
                     detail=f"Ticket with ID {ticket_id} not found"
                 )
             
-            # Check if already assigned to current user (idempotent)
+            # Check if already assigned to current user (idempotent) - must also be escalated
             if ticket.assigned_agent_id == current_user.id:
-                return TicketResponse.model_validate(ticket)
+                if ticket.status == "escalated":
+                    return TicketResponse.model_validate(ticket)
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=f"Ticket assigned to you but status is '{ticket.status}', cannot re-assign"
+                    )
             
             if ticket.assigned_agent_id is not None:
                 raise HTTPException(
@@ -469,7 +475,7 @@ def close_ticket(
         TicketResponse: The updated closed ticket
         
     Raises:
-        HTTPException: 404 if ticket not found, 400 if status not allowed, 403 if not agent/admin
+        HTTPException: 404 if ticket not found, 409 if state transition conflict, 403 if not agent/admin
     """
     try:
         # Atomic UPDATE is the ONLY gate - no pre-fetch to avoid TOCTOU race

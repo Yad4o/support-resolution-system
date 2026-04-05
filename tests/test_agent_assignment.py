@@ -59,33 +59,39 @@ def client_with_temp_db(temp_db):
         engine.dispose()
 
 
-def test_agent_can_assign_escalated_ticket(client_with_temp_db):
-    """Test that an agent can assign an escalated ticket to themselves."""
-    from app.api.auth import create_access_token
-    
-    client, db = client_with_temp_db
-    
-    agent = User(
-        email="agent@test.com",
-        hashed_password="hashed_password",
-        role="agent"
-    )
-    db.add(agent)
+def user_factory(db, email, role="agent", password="hashed_password"):
+    """Create and return a User."""
+    user = User(email=email, hashed_password=password, role=role)
+    db.add(user)
     db.commit()
-    db.refresh(agent)
-    
-    ticket = Ticket(
-        message="Escalated ticket",
-        status="escalated",
-        user_id=None
-    )
+    db.refresh(user)
+    return user
+
+
+def ticket_factory(db, message, status, user_id=None, **kwargs):
+    """Create and return a Ticket."""
+    ticket = Ticket(message=message, status=status, user_id=user_id, **kwargs)
     db.add(ticket)
     db.commit()
     db.refresh(ticket)
+    return ticket
+
+
+def auth_headers_for(user):
+    """Create and return Authorization header for a user."""
+    from app.api.auth import create_access_token
+    token = create_access_token(data={"sub": str(user.id), "role": user.role})
+    return {"Authorization": f"Bearer {token}"}
+
+
+def test_agent_can_assign_escalated_ticket(client_with_temp_db):
+    """Test that an agent can assign an escalated ticket to themselves."""
+    client, db = client_with_temp_db
     
-    token = create_access_token(data={"sub": str(agent.id), "role": "agent"})
+    agent = user_factory(db, "agent@test.com", role="agent")
+    ticket = ticket_factory(db, "Escalated ticket", "escalated")
     
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = auth_headers_for(agent)
     response = client.post(f"/tickets/{ticket.id}/assign", headers=headers)
     
     assert response.status_code == 200
@@ -96,31 +102,12 @@ def test_agent_can_assign_escalated_ticket(client_with_temp_db):
 
 def test_regular_user_gets_403_when_assigning_ticket(client_with_temp_db):
     """Test that a regular user gets 403 when trying to assign a ticket."""
-    from app.api.auth import create_access_token
-    
     client, db = client_with_temp_db
     
-    user = User(
-        email="user@test.com",
-        hashed_password="hashed_password",
-        role="user"
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    user = user_factory(db, "user@test.com", role="user")
+    ticket = ticket_factory(db, "Escalated ticket", "escalated")
     
-    ticket = Ticket(
-        message="Escalated ticket",
-        status="escalated",
-        user_id=None
-    )
-    db.add(ticket)
-    db.commit()
-    db.refresh(ticket)
-    
-    token = create_access_token(data={"sub": str(user.id), "role": "user"})
-    
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = auth_headers_for(user)
     response = client.post(f"/tickets/{ticket.id}/assign", headers=headers)
     
     assert response.status_code == 403
@@ -129,34 +116,15 @@ def test_regular_user_gets_403_when_assigning_ticket(client_with_temp_db):
 
 def test_assign_auto_resolved_ticket_returns_409(client_with_temp_db):
     """Test that trying to assign an auto_resolved ticket returns 409 (conflict)."""
-    from app.api.auth import create_access_token
-    
     client, db = client_with_temp_db
     
-    agent = User(
-        email="agent@test.com",
-        hashed_password="hashed_password",
-        role="agent"
+    agent = user_factory(db, "agent@test.com", role="agent")
+    ticket = ticket_factory(
+        db, "Auto resolved ticket", "auto_resolved",
+        response="Auto response", intent="test_intent", confidence=0.9
     )
-    db.add(agent)
-    db.commit()
-    db.refresh(agent)
     
-    ticket = Ticket(
-        message="Auto resolved ticket",
-        status="auto_resolved",
-        user_id=None,
-        response="Auto response",
-        intent="test_intent",
-        confidence=0.9
-    )
-    db.add(ticket)
-    db.commit()
-    db.refresh(ticket)
-    
-    token = create_access_token(data={"sub": str(agent.id), "role": "agent"})
-    
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = auth_headers_for(agent)
     response = client.post(f"/tickets/{ticket.id}/assign", headers=headers)
     
     assert response.status_code == 409
@@ -165,31 +133,12 @@ def test_assign_auto_resolved_ticket_returns_409(client_with_temp_db):
 
 def test_agent_can_close_escalated_ticket(client_with_temp_db):
     """Test that an agent can close an escalated ticket."""
-    from app.api.auth import create_access_token
-    
     client, db = client_with_temp_db
     
-    agent = User(
-        email="agent@test.com",
-        hashed_password="hashed_password",
-        role="agent"
-    )
-    db.add(agent)
-    db.commit()
-    db.refresh(agent)
+    agent = user_factory(db, "agent@test.com", role="agent")
+    ticket = ticket_factory(db, "Escalated ticket to close", "escalated")
     
-    ticket = Ticket(
-        message="Escalated ticket to close",
-        status="escalated",
-        user_id=None
-    )
-    db.add(ticket)
-    db.commit()
-    db.refresh(ticket)
-    
-    token = create_access_token(data={"sub": str(agent.id), "role": "agent"})
-    
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = auth_headers_for(agent)
     response = client.post(f"/tickets/{ticket.id}/close", headers=headers)
     
     assert response.status_code == 200
@@ -200,31 +149,12 @@ def test_agent_can_close_escalated_ticket(client_with_temp_db):
 
 def test_close_ticket_has_status_closed_in_response(client_with_temp_db):
     """Test that the closed ticket has status 'closed' in the response."""
-    from app.api.auth import create_access_token
-    
     client, db = client_with_temp_db
     
-    admin = User(
-        email="admin@test.com",
-        hashed_password="hashed_password",
-        role="admin"
-    )
-    db.add(admin)
-    db.commit()
-    db.refresh(admin)
+    admin = user_factory(db, "admin@test.com", role="admin")
+    ticket = ticket_factory(db, "Ticket to close", "escalated")
     
-    ticket = Ticket(
-        message="Ticket to close",
-        status="escalated",
-        user_id=None
-    )
-    db.add(ticket)
-    db.commit()
-    db.refresh(ticket)
-    
-    token = create_access_token(data={"sub": str(admin.id), "role": "admin"})
-    
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = auth_headers_for(admin)
     response = client.post(f"/tickets/{ticket.id}/close", headers=headers)
     
     assert response.status_code == 200
