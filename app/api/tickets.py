@@ -25,6 +25,7 @@ DO NOT:
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 import logging
 
@@ -42,7 +43,7 @@ from app.core.config import settings
 from fastapi import status
 from app.services.similarity_search import find_similar_ticket
 from app.services.decision_engine import decide_resolution
-from app.api.auth import decode_token, get_current_user
+from app.api.auth import decode_token, get_current_user, require_agent_or_admin
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/tickets", tags=["Tickets"])
@@ -359,27 +360,6 @@ def get_ticket(
         )
 
 
-def require_agent_or_admin(current_user: User = Depends(get_current_user)) -> User:
-    """
-    Dependency to ensure current user has agent or admin role.
-    
-    Args:
-        current_user: Current authenticated user from JWT token
-        
-    Returns:
-        Current user if agent or admin
-        
-    Raises:
-        HTTPException: 403 if user is not agent or admin
-    """
-    if current_user.role not in ["agent", "admin"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied. Agent or admin role required."
-        )
-    return current_user
-
-
 @router.post("/{ticket_id}/assign", response_model=TicketResponse)
 def assign_ticket(
     ticket_id: int,
@@ -417,15 +397,19 @@ def assign_ticket(
                 detail="Only escalated tickets can be assigned"
             )
         
+        # Idempotent check - already assigned to current user is a no-op
+        if ticket.assigned_agent_id == current_user.id:
+            logger.info(f"Ticket {ticket_id} already assigned to user {current_user.id}")
+            return TicketResponse.model_validate(ticket)
+        
         # Guard against reassignment - check if already assigned to another agent
-        if ticket.assigned_agent_id is not None and ticket.assigned_agent_id != current_user.id:
+        if ticket.assigned_agent_id is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Ticket already assigned to agent {ticket.assigned_agent_id}"
             )
         
         # Atomic conditional update for concurrent safety
-        from sqlalchemy import update
         result = db.execute(
             update(Ticket)
             .where(
@@ -436,13 +420,12 @@ def assign_ticket(
         )
         
         if result.rowcount == 0:
-            # Another thread assigned it - check who got it
-            db.rollback()
-            ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
-            if ticket and ticket.assigned_agent_id == current_user.id:
+            # Another thread assigned it - check who got it (no rollback needed)
+            db.refresh(ticket)
+            if ticket.assigned_agent_id == current_user.id:
                 # We actually got it (rare race where we assigned it)
                 pass
-            elif ticket and ticket.assigned_agent_id is not None:
+            elif ticket.assigned_agent_id is not None:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=f"Ticket already assigned to agent {ticket.assigned_agent_id}"
@@ -456,7 +439,7 @@ def assign_ticket(
         db.commit()
         
         # Refresh ticket to get updated state
-        ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+        db.refresh(ticket)
         
         logger.info(f"Ticket {ticket_id} assigned to user {current_user.id}")
         return TicketResponse.model_validate(ticket)
@@ -469,7 +452,7 @@ def assign_ticket(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error occurred while assigning ticket"
-        )
+        ) from e
 
 
 @router.post("/{ticket_id}/close", response_model=TicketResponse)
@@ -526,7 +509,7 @@ def close_ticket(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error occurred while closing ticket"
-        )
+        ) from e
 
 
 
