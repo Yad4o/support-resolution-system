@@ -368,85 +368,68 @@ def assign_ticket(
 ) -> TicketResponse:
     """
     Assign an escalated ticket to the current agent/admin.
-    
+
+    The atomic UPDATE is the sole concurrency gate — there is no pre-fetch race.
+    All branching is driven by rowcount + a single post-update refresh.
+
     Args:
         ticket_id: ID of the ticket to assign
         db: Database session dependency
         current_user: Current authenticated agent/admin user
-        
+
     Returns:
         TicketResponse: The updated ticket with assigned agent
-        
+
     Raises:
-        HTTPException: 404 if ticket not found, 400 if not escalated, 403 if not agent/admin
+        HTTPException: 404 if ticket not found, 409 on conflict, 403 if not agent/admin
     """
     try:
-        # Fetch ticket by ID
-        ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
-        
-        if not ticket:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Ticket with ID {ticket_id} not found"
-            )
-        
-        # Only escalated tickets can be assigned
-        if ticket.status != "escalated":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Only escalated tickets can be assigned"
-            )
-        
-        # Idempotent check - already assigned to current user is a no-op
-        if ticket.assigned_agent_id == current_user.id:
-            logger.info(f"Ticket {ticket_id} already assigned to user {current_user.id}")
-            return TicketResponse.model_validate(ticket)
-        
-        # Guard against reassignment - check if already assigned to another agent
-        if ticket.assigned_agent_id is not None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Ticket already assigned to agent {ticket.assigned_agent_id}"
-            )
-        
-        # Atomic conditional update for concurrent safety - also guards against concurrent status change
+        # Single atomic UPDATE: only succeeds when the ticket exists, is escalated,
+        # and has no assigned agent yet.  No pre-fetch → no TOCTOU window.
         result = db.execute(
             update(Ticket)
             .where(
                 Ticket.id == ticket_id,
-                Ticket.assigned_agent_id.is_(None),  # Only update if unassigned
-                Ticket.status == "escalated"  # Guard against concurrent status change
+                Ticket.assigned_agent_id.is_(None),
+                Ticket.status == "escalated",
             )
             .values(assigned_agent_id=current_user.id)
         )
-        
+        db.commit()
+
+        # Post-update fetch — used only to build the response or diagnose rowcount == 0.
+        ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+
+        if not ticket:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Ticket {ticket_id} not found",
+            )
+
         if result.rowcount == 0:
-            # Check why update failed - refresh to see current state
-            db.refresh(ticket)
-            if ticket.assigned_agent_id is not None:
+            # Ticket exists but the WHERE clause didn't match — determine why.
+            if ticket.assigned_agent_id == current_user.id:
+                # Idempotent: this agent already owns it (e.g. duplicate request).
+                logger.info(f"Ticket {ticket_id} already assigned to user {current_user.id}")
+            elif ticket.assigned_agent_id is not None:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
-                    detail=f"Ticket already assigned to agent {ticket.assigned_agent_id}"
+                    detail=f"Ticket already assigned to agent {ticket.assigned_agent_id}",
                 )
             elif ticket.status != "escalated":
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
-                    detail=f"Ticket status changed to '{ticket.status}', cannot assign"
+                    detail=f"Ticket status changed to '{ticket.status}', cannot assign",
                 )
             else:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to assign ticket due to concurrent update"
+                    detail="Failed to assign ticket due to concurrent update",
                 )
-        
-        db.commit()
-        
-        # Refresh ticket to get updated state
-        db.refresh(ticket)
-        
+
         logger.info(f"Ticket {ticket_id} assigned to user {current_user.id}")
         return TicketResponse.model_validate(ticket)
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -454,7 +437,7 @@ def assign_ticket(
         logger.exception(f"Failed to assign ticket {ticket_id}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error occurred while assigning ticket"
+            detail="Internal server error occurred while assigning ticket",
         ) from e
 
 
