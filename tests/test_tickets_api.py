@@ -584,16 +584,8 @@ class TestRateLimiting:
         # Use a fast mock for AI so it doesn't take forever
         with patch("app.api.tickets.classify_intent", return_value={"intent": "test", "confidence": 0.9}):
             for i in range(60):
-                resp = client.post(
-                    "/tickets/", 
-                    json={"message": f"rate limit test {i}"},
-                    headers={"X-Forwarded-For": "1.2.3.4"}
-                )
+                resp = client.post("/tickets/", json={"message": f"rate limit test {i}"})
                 assert resp.status_code == 201
 
-            resp = client.post(
-                "/tickets/", 
-                json={"message": "one too many"},
-                headers={"X-Forwarded-For": "1.2.3.4"}
-            )
+            resp = client.post("/tickets/", json={"message": "one too many"})
             assert resp.status_code == 429
