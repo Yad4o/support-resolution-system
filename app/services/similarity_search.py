@@ -1,21 +1,50 @@
-import re
-import math
 import hashlib
 import json
-from typing import Dict, List, Optional
+import math
+import re
 from collections import Counter
+from typing import Dict, List, Optional
 
 from app.core.config import settings
+
+# Redis client singleton for lazy load
+_redis_client = None
+
+
+class SafeEncoder(json.JSONEncoder):
+    """Custom JSON encoder to handle types not natively supported by JSON."""
+
+    def default(self, obj):
+        import datetime
+        import decimal
+        import uuid
+
+        if isinstance(obj, (datetime.datetime, datetime.date)):
+            return obj.isoformat()
+        if isinstance(obj, decimal.Decimal):
+            return float(obj)
+        if isinstance(obj, uuid.UUID):
+            return str(obj)
+        return super().default(obj)
 
 
 def _get_cache_client():
     """Return a Redis client if REDIS_URL is configured, else None."""
+    global _redis_client
+    if _redis_client is not None:
+        return _redis_client
+
     from app.core.config import settings
+
     if not settings.REDIS_URL:
         return None
     try:
         import redis
-        return redis.from_url(settings.REDIS_URL, decode_responses=True, socket_timeout=1)
+
+        _redis_client = redis.from_url(
+            settings.REDIS_URL, decode_responses=True, socket_timeout=1
+        )
+        return _redis_client
     except Exception:
         return None
 
@@ -180,18 +209,19 @@ def find_similar_ticket(new_message: str, resolved_tickets: List[Dict], similari
     
     if not resolved_tickets or not isinstance(resolved_tickets, list):
         return None
-    
+
     # Try cache first
     cache = _get_cache_client()
-    if cache:
-        key = _cache_key(new_message)
+    key = _cache_key(new_message) if cache else None
+
+    if cache and key:
         try:
             cached = cache.get(key)
-            if cached:
+            if cached is not None:
                 return json.loads(cached)
         except Exception:
             pass  # Cache miss or error — continue normally
-    
+
     # Validate similarity_threshold parameter
     if similarity_threshold is None:
         similarity_threshold = settings.SIMILARITY_THRESHOLD
@@ -199,54 +229,59 @@ def find_similar_ticket(new_message: str, resolved_tickets: List[Dict], similari
         raise ValueError("similarity_threshold must be a numeric value")
     if not (0.0 <= similarity_threshold <= 1.0):
         raise ValueError("similarity_threshold must be between 0.0 and 1.0")
-    
+
     # Extract messages from resolved tickets
     ticket_messages = []
     for ticket in resolved_tickets:
-        if isinstance(ticket, dict) and 'message' in ticket:
-            message = ticket['message']
+        if isinstance(ticket, dict) and "message" in ticket:
+            message = ticket["message"]
             # Only accept string messages and skip blank/whitespace-only ones
-            if isinstance(message, str) and message.strip() != '':
+            if isinstance(message, str) and message.strip() != "":
                 ticket_messages.append(message.strip())
-    
+
     if not ticket_messages:
         return None
-    
+
     # Precompute IDF scores once for efficiency
     idf_scores = _compute_idf([new_message] + ticket_messages)
-    
+
     # Calculate TF-IDF for new message
     new_tf = _calculate_tf(new_message)
     new_tfidf = _apply_idf(new_tf, idf_scores)
-    
+
     # Find best match
     best_match = None
     best_similarity = 0.0
     best_ticket = None
-    
+
     for i, ticket in enumerate(resolved_tickets):
-        if not isinstance(ticket, dict) or 'message' not in ticket:
+        if not isinstance(ticket, dict) or "message" not in ticket:
             continue
-            
-        ticket_message = ticket['message']
-        
+
+        ticket_message = ticket["message"]
+
         # Skip non-string or blank messages (consistent with earlier validation)
-        if not isinstance(ticket_message, str) or ticket_message.strip() == '':
+        if (
+            not isinstance(ticket_message, str)
+            or ticket_message.strip() == ""
+        ):
             continue
-        
+
         # Calculate TF-IDF for this ticket
         ticket_tf = _calculate_tf(ticket_message)
         ticket_tfidf = _apply_idf(ticket_tf, idf_scores)
-        
+
         # Calculate cosine similarity
         similarity = _cosine_similarity(new_tfidf, ticket_tfidf)
-        
+
         # Update best match if this is better (or equal for first candidate)
-        if similarity > best_similarity or (best_similarity == 0.0 and similarity == 0.0):
+        if similarity > best_similarity or (
+            best_similarity == 0.0 and similarity == 0.0
+        ):
             best_similarity = similarity
             best_match = ticket_message
             best_ticket = ticket
-    
+
     # Check if best match meets threshold
     result = None
     if best_match and best_similarity >= similarity_threshold:
@@ -254,18 +289,14 @@ def find_similar_ticket(new_message: str, resolved_tickets: List[Dict], similari
             "matched_text": best_match,
             "similarity_score": round(best_similarity, 3),
             "ticket": best_ticket,  # Include the original ticket for access to response/solution
-            "quality_score": best_ticket.get("quality_score")
+            "quality_score": best_ticket.get("quality_score"),
         }
-    
-    # Try cache result
-    if cache:
+
+    # Record result to cache
+    if cache and key:
         try:
-            if result is not None:
-                # Cache the result for 5 minutes
-                cache.setex(_cache_key(new_message), 300, json.dumps(result))
-            else:
-                # Cache None results (no match found) to avoid repeated DB queries (2 minutes)
-                cache.setex(_cache_key(new_message), 120, json.dumps(None))
+            ttl = 300 if result is not None else 120
+            cache.setex(key, ttl, json.dumps(result, cls=SafeEncoder))
         except Exception:
             pass  # Cache write failure is not a problem
 
