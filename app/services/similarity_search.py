@@ -1,9 +1,28 @@
 import re
 import math
+import hashlib
+import json
 from typing import Dict, List, Optional
 from collections import Counter
 
 from app.core.config import settings
+
+
+def _get_cache_client():
+    """Return a Redis client if REDIS_URL is configured, else None."""
+    from app.core.config import settings
+    if not settings.REDIS_URL:
+        return None
+    try:
+        import redis
+        return redis.from_url(settings.REDIS_URL, decode_responses=True, socket_timeout=1)
+    except Exception:
+        return None
+
+
+def _cache_key(message: str) -> str:
+    """Generate a cache key from the message content."""
+    return f"srs:similarity:{hashlib.sha256(message.encode()).hexdigest()[:16]}"
 
 
 def _tokenize(text: str) -> List[str]:
@@ -162,6 +181,17 @@ def find_similar_ticket(new_message: str, resolved_tickets: List[Dict], similari
     if not resolved_tickets or not isinstance(resolved_tickets, list):
         return None
     
+    # Try cache first
+    cache = _get_cache_client()
+    if cache:
+        key = _cache_key(new_message)
+        try:
+            cached = cache.get(key)
+            if cached:
+                return json.loads(cached)
+        except Exception:
+            pass  # Cache miss or error — continue normally
+    
     # Validate similarity_threshold parameter
     if similarity_threshold is None:
         similarity_threshold = settings.SIMILARITY_THRESHOLD
@@ -218,12 +248,25 @@ def find_similar_ticket(new_message: str, resolved_tickets: List[Dict], similari
             best_ticket = ticket
     
     # Check if best match meets threshold
+    result = None
     if best_match and best_similarity >= similarity_threshold:
-        return {
+        result = {
             "matched_text": best_match,
             "similarity_score": round(best_similarity, 3),
             "ticket": best_ticket,  # Include the original ticket for access to response/solution
             "quality_score": best_ticket.get("quality_score")
         }
     
-    return None
+    # Try cache result
+    if cache:
+        try:
+            if result is not None:
+                # Cache the result for 5 minutes
+                cache.setex(_cache_key(new_message), 300, json.dumps(result))
+            else:
+                # Cache None results (no match found) to avoid repeated DB queries (2 minutes)
+                cache.setex(_cache_key(new_message), 120, json.dumps(None))
+        except Exception:
+            pass  # Cache write failure is not a problem
+
+    return result

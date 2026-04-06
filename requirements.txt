@@ -50,3 +50,4 @@ typing-extensions==4.9.0
 # -----------------------------
 pytest==8.0.2
 pytest-asyncio==0.23.5
+redis==5.0.4
