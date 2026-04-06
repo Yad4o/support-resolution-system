@@ -51,17 +51,9 @@ def db():
 @pytest.fixture
 def reset_limiter():
     from app.core.limiter import limiter
-    try:
-        if hasattr(limiter, '_storage') and limiter._storage:
-            limiter._storage.reset()
-    except Exception:
-        pass
+    limiter.reset()
     yield
-    try:
-        if hasattr(limiter, '_storage') and limiter._storage:
-            limiter._storage.reset()
-    except Exception:
-        pass
+    limiter.reset()
 
 @pytest.fixture
 def agent_token(setup_database, db):
@@ -516,10 +508,14 @@ class TestTicketAccessControl:
         finally:
             app.dependency_overrides.clear()
 
-    def test_list_tickets_user_isolation(self):
+    def test_list_tickets_user_isolation(self, db):
         """GET returns only that user's tickets for regular users."""
-        user1 = User(id=1, email="u1@ex.com", role="user")
-        user2 = User(id=2, email="u2@ex.com", role="user")
+        # Create users in database
+        user1 = User(id=1, email="u1@ex.com", role="user", hashed_password="fake-password-hash")
+        user2 = User(id=2, email="u2@ex.com", role="user", hashed_password="fake-password-hash")
+        db.add(user1)
+        db.add(user2)
+        db.commit()
         
         # We need a way to switch users mid-test
         # We'll patch decode_token in tickets module since it's used inside the endpoint

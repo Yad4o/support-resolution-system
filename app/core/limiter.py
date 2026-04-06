@@ -1,4 +1,6 @@
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from limits.storage import MemoryStorage
 
-limiter = Limiter(key_func=get_remote_address, headers_enabled=True)
+_storage = MemoryStorage()
+limiter = Limiter(key_func=get_remote_address, headers_enabled=True, storage_uri="memory://")
