@@ -45,11 +45,12 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.services.similarity_search import (
     find_similar_ticket,
+    get_resolved_tickets,
     _get_cache_client,
     _cache_key
 )
 import json
-from app.main import limiter
+from app.core.limiter import limiter
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/tickets", tags=["Tickets"])
@@ -96,16 +97,7 @@ def _run_ticket_automation(ticket: Ticket, db: Session) -> Ticket:
             pass
 
     if similar_result is None:
-        resolved_tickets = (
-            db.query(Ticket)
-            .filter(
-                Ticket.status == "auto_resolved",
-                Ticket.response.isnot(None),
-            )
-            .order_by(Ticket.created_at.desc())
-            .limit(50)
-            .all()
-        )
+        resolved_tickets = get_resolved_tickets(db)
 
         # Convert to list of dicts for similarity search
         resolved_tickets_data = [

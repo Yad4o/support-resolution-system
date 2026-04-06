@@ -29,12 +29,59 @@ client = TestClient(app)
 @pytest.fixture(autouse=True)
 def setup_database():
     """Initialize database for all tests."""
+    from app.models.user import User
     init_db()
     
     # Clean up any existing data before each test
     with engine.connect() as conn:
         conn.execute(Ticket.__table__.delete())
+        conn.execute(User.__table__.delete())
         conn.commit()
+
+@pytest.fixture
+def db():
+    """Create a new database session for a test."""
+    from app.db.session import SessionLocal
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+@pytest.fixture
+def reset_limiter():
+    from app.core.limiter import limiter
+    limiter._storage.reset()
+    yield
+    limiter._storage.reset()
+
+@pytest.fixture
+def agent_token(db):
+    """Create an agent and return its auth token."""
+    from app.models.user import User
+    from app.api.auth import create_access_token
+    
+    agent = User(email="agent@example.com", role="agent", hashed_password="fake-password-hash")
+    db.add(agent)
+    db.commit()
+    db.refresh(agent)
+    
+    token = create_access_token(data={"sub": str(agent.id), "role": "agent"})
+    return f"Bearer {token}"
+
+@pytest.fixture
+def user_token(db):
+    """Create a user and return its auth token."""
+    from app.models.user import User
+    from app.api.auth import create_access_token
+    
+    user = User(email="user@example.com", role="user", hashed_password="fake-password-hash")
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    
+    token = create_access_token(data={"sub": str(user.id), "role": "user"})
+    return f"Bearer {token}"
 
 
 class TestCreateTicket:
@@ -485,76 +532,52 @@ class TestTicketAccessControl:
             assert len(data["tickets"]) == 1
             assert data["tickets"][0]["message"] == "User 1 Ticket"
 
-    def test_agent_assign_escalated_ticket(self):
+    def test_agent_assign_escalated_ticket(self, agent_token):
         """Agent role: can assign an escalated ticket."""
         # Create an escalated ticket
         with patch("app.api.tickets.classify_intent", return_value={"intent": "login_issue", "confidence": 0.1}):
             resp = client.post("/tickets/", json={"message": "Fix me"})
             ticket_id = resp.json()["id"]
         
-        mock_agent = User(id=99, email="agent@ex.com", role="agent")
-        app.dependency_overrides[require_agent_or_admin] = lambda: mock_agent
-        try:
-            response = client.post(f"/tickets/{ticket_id}/assign", headers={"Authorization": "Bearer agent-t"})
-            assert response.status_code == 200
-            assert response.json()["assigned_agent_id"] == 99
-        finally:
-            app.dependency_overrides.clear()
+        response = client.post(f"/tickets/{ticket_id}/assign", headers={"Authorization": agent_token})
+        assert response.status_code == 200
+        # The agent_token fixture creates an agent with some ID. We just check it's assigned.
+        assert response.json()["assigned_agent_id"] is not None
 
-    def test_user_cannot_assign_ticket(self):
+    def test_user_cannot_assign_ticket(self, user_token):
         """Regular user attempting assign -> 403."""
         # Create an escalated ticket
         with patch("app.api.tickets.classify_intent", return_value={"intent": "login_issue", "confidence": 0.1}):
             resp = client.post("/tickets/", json={"message": "Fix me"})
             ticket_id = resp.json()["id"]
 
-        from fastapi import HTTPException
-        def mock_require_fail():
-            raise HTTPException(status_code=403, detail="Not authorized")
+        response = client.post(f"/tickets/{ticket_id}/assign", headers={"Authorization": user_token})
+        assert response.status_code == 403
 
-        app.dependency_overrides[require_agent_or_admin] = mock_require_fail
-        try:
-            response = client.post(f"/tickets/{ticket_id}/assign", headers={"Authorization": "Bearer user-t"})
-            assert response.status_code == 403
-        finally:
-            app.dependency_overrides.clear()
-
-    def test_agent_close_escalated_ticket(self):
+    def test_agent_close_escalated_ticket(self, agent_token):
         """Agent role: can close an escalated ticket -> status becomes 'closed'."""
         with patch("app.api.tickets.classify_intent", return_value={"intent": "login_issue", "confidence": 0.1}):
             resp = client.post("/tickets/", json={"message": "Close me"})
             ticket_id = resp.json()["id"]
             assert resp.json()["status"] == "escalated"
 
-        mock_agent = User(id=99, email="agent@ex.com", role="agent")
-        app.dependency_overrides[require_agent_or_admin] = lambda: mock_agent
-        try:
-            response = client.post(f"/tickets/{ticket_id}/close", headers={"Authorization": "Bearer agent-t"})
-            assert response.status_code == 200
-            assert response.json()["status"] == "closed"
-        finally:
-            app.dependency_overrides.clear()
+        response = client.post(f"/tickets/{ticket_id}/close", headers={"Authorization": agent_token})
+        assert response.status_code == 200
+        assert response.json()["status"] == "closed"
 
 
 class TestRateLimiting:
     """Test cases for rate limiting on ticket creation."""
 
-    def test_create_ticket_rate_limit(self):
+    def test_create_ticket_rate_limit(self, reset_limiter):
         """Send 61 sequential POSTs to POST /tickets/ -> 61st returns HTTP 429."""
-        # Use a fresh TestClient and reset limiter to be sure
-        from app.main import limiter
-        limiter._storage.reset()
-        
-        # We need mock settings to ensure 60/minute
-        with patch("app.api.tickets.settings") as mock_settings:
-            mock_settings.RATE_LIMIT_PER_MINUTE = 60
+        # Fix mock for settings imports if needed
+        # Use a fast mock for AI so it doesn't take forever
+        with patch("app.api.tickets.classify_intent", return_value={"intent": "test", "confidence": 0.9}):
+            for _ in range(60):
+                resp = client.post("/tickets/", json={"message": "rate limit test"})
+                assert resp.status_code == 201
             
-            # Use a fast mock for AI so it doesn't take forever
-            with patch("app.api.tickets.classify_intent", return_value={"intent": "test", "confidence": 0.9}):
-                for _ in range(60):
-                    resp = client.post("/tickets/", json={"message": "rate limit test"})
-                    assert resp.status_code == 201
-                
-                # 61st request
-                resp = client.post("/tickets/", json={"message": "one too many"})
-                assert resp.status_code == 429
+            # 61st request
+            resp = client.post("/tickets/", json={"message": "one too many"})
+            assert resp.status_code == 429

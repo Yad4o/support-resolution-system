@@ -7,8 +7,9 @@ import re
 import uuid
 from collections import Counter
 from typing import Dict, List, Optional
-
 from app.core.config import settings
+from app.models.ticket import Ticket
+from sqlalchemy.orm import Session
 
 # Redis client singleton for lazy load
 _redis_client = None
@@ -184,6 +185,20 @@ def _cosine_similarity(tfidf1: Dict[str, float], tfidf2: Dict[str, float]) -> fl
         return 0.0
     
     return dot_product / (magnitude1 * magnitude2)
+
+
+def get_resolved_tickets(db: Session) -> List[Ticket]:
+    """Fetch recent successfully resolved tickets for similarity search."""
+    return (
+        db.query(Ticket)
+        .filter(
+            Ticket.status == "auto_resolved",
+            Ticket.response.isnot(None),
+        )
+        .order_by(Ticket.created_at.desc())
+        .limit(50)
+        .all()
+    )
 
 
 def find_similar_ticket(new_message: str, resolved_tickets: List[Dict], similarity_threshold: float = None) -> Optional[Dict]:
