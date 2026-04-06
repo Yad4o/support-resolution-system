@@ -397,20 +397,23 @@ def assign_ticket(
         )
         db.commit()
 
-        # Post-update fetch — used only to build the response or diagnose rowcount == 0.
-        ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
-
-        if not ticket:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Ticket {ticket_id} not found",
-            )
-
         if result.rowcount == 0:
-            # Ticket exists but the WHERE clause didn't match — determine why.
+            # The WHERE clause didn't match.  Roll back to clear the session
+            # snapshot (belt-and-suspenders against REPEATABLE READ stale reads
+            # via SQLAlchemy's identity map), then re-query for fresh state.
+            db.rollback()
+            ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+
+            if not ticket:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Ticket {ticket_id} not found",
+                )
+
             if ticket.assigned_agent_id == current_user.id:
                 # Idempotent: this agent already owns it (e.g. duplicate request).
                 logger.info(f"Ticket {ticket_id} already assigned to user {current_user.id}")
+                return TicketResponse.model_validate(ticket)
             elif ticket.assigned_agent_id is not None:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
@@ -426,6 +429,15 @@ def assign_ticket(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Failed to assign ticket due to concurrent update",
                 )
+
+        # Success path: fetch the committed row for the response.
+        ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+
+        if not ticket:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Ticket {ticket_id} not found",
+            )
 
         logger.info(f"Ticket {ticket_id} assigned to user {current_user.id}")
         return TicketResponse.model_validate(ticket)
