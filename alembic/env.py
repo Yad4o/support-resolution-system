@@ -11,8 +11,8 @@ from alembic import context
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import application settings and models
-from app.core.config import settings
 from app.db.session import Base
+from app.models import user, ticket, feedback  # import models to register them
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -48,6 +48,7 @@ def run_migrations_offline() -> None:
 
     """
     # Prefer application DB URL over static alembic.ini value
+    from app.core.config import settings
     url = settings.DATABASE_URL if settings.DATABASE_URL else config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
@@ -68,12 +69,14 @@ def run_migrations_online() -> None:
 
     """
     # Prefer application DB URL over static alembic.ini value
-    config_section = config.get_section(config.config_ini_section, {})
-    if settings.DATABASE_URL:
-        config_section['sqlalchemy.url'] = settings.DATABASE_URL
+    from app.core.config import settings
+    configuration = config.get_section(config.config_ini_section)
+    if configuration is None:
+        configuration = {}
+    configuration["sqlalchemy.url"] = settings.DATABASE_URL
     
     connectable = engine_from_config(
-        config_section,
+        configuration,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
