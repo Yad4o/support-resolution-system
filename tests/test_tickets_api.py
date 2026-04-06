@@ -51,12 +51,20 @@ def db():
 @pytest.fixture
 def reset_limiter():
     from app.core.limiter import limiter
-    limiter._storage.reset()
+    try:
+        if hasattr(limiter, '_storage') and limiter._storage:
+            limiter._storage.reset()
+    except Exception:
+        pass
     yield
-    limiter._storage.reset()
+    try:
+        if hasattr(limiter, '_storage') and limiter._storage:
+            limiter._storage.reset()
+    except Exception:
+        pass
 
 @pytest.fixture
-def agent_token(db):
+def agent_token(setup_database, db):
     """Create an agent and return its auth token."""
     from app.models.user import User
     from app.api.auth import create_access_token
@@ -70,7 +78,7 @@ def agent_token(db):
     return f"Bearer {token}"
 
 @pytest.fixture
-def user_token(db):
+def user_token(setup_database, db):
     """Create a user and return its auth token."""
     from app.models.user import User
     from app.api.auth import create_access_token
@@ -536,8 +544,10 @@ class TestTicketAccessControl:
         """Agent role: can assign an escalated ticket."""
         # Create an escalated ticket
         with patch("app.api.tickets.classify_intent", return_value={"intent": "login_issue", "confidence": 0.1}):
-            resp = client.post("/tickets/", json={"message": "Fix me"})
-            ticket_id = resp.json()["id"]
+            with patch("app.api.tickets.decide_resolution", return_value="escalate"):
+                resp = client.post("/tickets/", json={"message": "Fix me"})
+                assert resp.json()["status"] == "escalated"
+                ticket_id = resp.json()["id"]
         
         response = client.post(f"/tickets/{ticket_id}/assign", headers={"Authorization": agent_token})
         assert response.status_code == 200
@@ -548,8 +558,10 @@ class TestTicketAccessControl:
         """Regular user attempting assign -> 403."""
         # Create an escalated ticket
         with patch("app.api.tickets.classify_intent", return_value={"intent": "login_issue", "confidence": 0.1}):
-            resp = client.post("/tickets/", json={"message": "Fix me"})
-            ticket_id = resp.json()["id"]
+            with patch("app.api.tickets.decide_resolution", return_value="escalate"):
+                resp = client.post("/tickets/", json={"message": "Fix me"})
+                assert resp.json()["status"] == "escalated"
+                ticket_id = resp.json()["id"]
 
         response = client.post(f"/tickets/{ticket_id}/assign", headers={"Authorization": user_token})
         assert response.status_code == 403
@@ -557,9 +569,10 @@ class TestTicketAccessControl:
     def test_agent_close_escalated_ticket(self, agent_token):
         """Agent role: can close an escalated ticket -> status becomes 'closed'."""
         with patch("app.api.tickets.classify_intent", return_value={"intent": "login_issue", "confidence": 0.1}):
-            resp = client.post("/tickets/", json={"message": "Close me"})
-            ticket_id = resp.json()["id"]
-            assert resp.json()["status"] == "escalated"
+            with patch("app.api.tickets.decide_resolution", return_value="escalate"):
+                resp = client.post("/tickets/", json={"message": "Close me"})
+                assert resp.json()["status"] == "escalated"
+                ticket_id = resp.json()["id"]
 
         response = client.post(f"/tickets/{ticket_id}/close", headers={"Authorization": agent_token})
         assert response.status_code == 200
@@ -574,10 +587,17 @@ class TestRateLimiting:
         # Fix mock for settings imports if needed
         # Use a fast mock for AI so it doesn't take forever
         with patch("app.api.tickets.classify_intent", return_value={"intent": "test", "confidence": 0.9}):
-            for _ in range(60):
-                resp = client.post("/tickets/", json={"message": "rate limit test"})
+            for i in range(60):
+                resp = client.post(
+                    "/tickets/", 
+                    json={"message": f"rate limit test {i}"},
+                    headers={"X-Forwarded-For": "1.2.3.4"}
+                )
                 assert resp.status_code == 201
-            
-            # 61st request
-            resp = client.post("/tickets/", json={"message": "one too many"})
+
+            resp = client.post(
+                "/tickets/", 
+                json={"message": "one too many"},
+                headers={"X-Forwarded-For": "1.2.3.4"}
+            )
             assert resp.status_code == 429

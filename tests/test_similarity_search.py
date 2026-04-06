@@ -159,36 +159,37 @@ def test_similarity_search_db_cache_hit():
         mock_classify.return_value = {"intent": "payment_issue", "confidence": 0.9, "sub_intent": "refund"}
         
         with patch("app.api.tickets._get_cache_client") as mock_get_cache:
-            mock_cache = MagicMock()
-            mock_get_cache.return_value = mock_cache
-            
-            # 1. First call: Cache miss
-            mock_cache.get.return_value = None
-            
-            # Patch the query function as a spy (Issue #5)
-            from app.api.tickets import get_resolved_tickets
-            with patch("app.api.tickets.get_resolved_tickets", wraps=get_resolved_tickets) as spy_query:
-                # Setup return value if needed, but wraps=real_fn will call the real one (which is fine in SQLite test)
-                # Or just return empty list to be safe
-                spy_query.return_value = []
+            with patch("app.api.tickets._cache_key", return_value="test-cache-key"):
+                mock_cache = MagicMock()
+                mock_get_cache.return_value = mock_cache
                 
-                _run_ticket_automation(mock_ticket, mock_db)
+                # 1. First call: Cache miss
+                mock_cache.get.return_value = None
                 
-                # Verify query was made
-                assert spy_query.call_count == 1
-                
-                # 2. Second call: Same message, mock cache HIT
-                mock_cache.get.return_value = json.dumps({
-                    "matched_text": "i want a refund",
-                    "similarity_score": 0.95,
-                    "ticket": {"response": "Refunds take 3 days"},
-                    "quality_score": 1.0
-                })
-                
-                spy_query.reset_mock()
-                _run_ticket_automation(mock_ticket, mock_db)
-                
-                # Verify query was NOT made this time
-                assert spy_query.call_count == 0
-            # Verify it used the cache
-            assert mock_cache.get.call_count >= 2
+                # Patch the query function as a spy (Issue #5)
+                from app.api.tickets import get_resolved_tickets
+                with patch("app.api.tickets.get_resolved_tickets", wraps=get_resolved_tickets) as spy_query:
+                    # Setup return value if needed, but wraps=real_fn will call the real one (which is fine in SQLite test)
+                    # Or just return empty list to be safe
+                    spy_query.return_value = []
+                    
+                    _run_ticket_automation(mock_ticket, mock_db)
+                    
+                    # Verify query was made
+                    assert spy_query.call_count == 1
+                    
+                    # 2. Second call: Same message, mock cache HIT
+                    mock_cache.get.return_value = json.dumps({
+                        "matched_text": "i want a refund",
+                        "similarity_score": 0.95,
+                        "ticket": {"response": "Refunds take 3 days"},
+                        "quality_score": 1.0
+                    })
+                    
+                    spy_query.reset_mock()
+                    _run_ticket_automation(mock_ticket, mock_db)
+                    
+                    # Verify query was NOT made this time
+                    assert spy_query.call_count == 0
+                # Verify it used the cache
+                assert mock_cache.get.call_count >= 2
