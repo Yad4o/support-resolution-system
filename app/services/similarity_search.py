@@ -1,31 +1,15 @@
-import datetime
-import decimal
-import hashlib
-import json
 import math
 import re
-import uuid
 from collections import Counter
 from typing import Dict, List, Optional
+
 from app.core.config import settings
 from app.models.ticket import Ticket
+from app.utils.service_helpers import CacheHelper, ErrorHelper, MetricsHelper
 from sqlalchemy.orm import Session
 
 # Redis client singleton for lazy load
 _redis_client = None
-
-
-class SafeEncoder(json.JSONEncoder):
-    """Custom JSON encoder to handle types not natively supported by JSON."""
-
-    def default(self, obj):
-        if isinstance(obj, (datetime.datetime, datetime.date)):
-            return obj.isoformat()
-        if isinstance(obj, decimal.Decimal):
-            return float(obj)
-        if isinstance(obj, uuid.UUID):
-            return str(obj)
-        return super().default(obj)
 
 
 def _get_cache_client():
@@ -43,14 +27,15 @@ def _get_cache_client():
             settings.REDIS_URL, decode_responses=True, socket_timeout=1
         )
         return _redis_client
-    except Exception:
+    except Exception as e:
+        ErrorHelper.log_and_raise(e, "Failed to create Redis client")
         _redis_client = None  # Don't cache the failure
         return None
 
 
 def _cache_key(message: str) -> str:
     """Generate a cache key from the message content."""
-    return f"srs:similarity:{hashlib.sha256(message.encode()).hexdigest()[:16]}"
+    return CacheHelper.make_cache_key("srs:similarity", message)[:32]
 
 
 def _tokenize(text: str) -> List[str]:
@@ -66,7 +51,9 @@ def _tokenize(text: str) -> List[str]:
     if not text or not isinstance(text, str):
         return []
     
-    # Convert to lowercase and split on non-word characters
+    # Use validation helper to sanitize input
+    from app.utils.service_helpers import ValidationHelper
+    text = ValidationHelper.sanitize_string(text)
     text = text.lower()
     tokens = re.findall(r'\b\w+\b', text)
     return tokens
