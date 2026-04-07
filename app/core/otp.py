@@ -61,11 +61,11 @@ def send_otp_email(email: str, otp: str) -> bool:
         # Gmail SMTP configuration - USE ENVIRONMENT VARIABLES
         smtp_server = "smtp.gmail.com"
         smtp_port = 587
-        sender_email = os.getenv("GMAIL_EMAIL", "kurukuruom@gmail.com")
-        sender_password = os.getenv("GMAIL_APP_PASSWORD", "your-app-password")
+        sender_email = os.getenv("GMAIL_EMAIL")
+        sender_password = os.getenv("GMAIL_APP_PASSWORD")
         
         # Check if environment variables are set
-        if sender_email == "kurukuruom@gmail.com" or sender_password == "your-app-password":
+        if not sender_email or not sender_password or sender_email == "your-email@gmail.com" or sender_password == "your-app-password":
             print("⚠️  EMAIL NOT CONFIGURED: Set environment variables")
             print("   GMAIL_EMAIL=your-email@gmail.com")
             print("   GMAIL_APP_PASSWORD=your-16-char-app-password")
