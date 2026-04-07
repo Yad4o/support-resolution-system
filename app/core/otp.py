@@ -31,6 +31,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 from typing import Optional
+import os
 
 from app.core.config import settings
 
@@ -57,17 +58,19 @@ def send_otp_email(email: str, otp: str) -> bool:
         True if email sent successfully, False otherwise
     """
     try:
-        # Gmail SMTP configuration - UPDATE WITH APP PASSWORD
+        # Gmail SMTP configuration - USE ENVIRONMENT VARIABLES
         smtp_server = "smtp.gmail.com"
         smtp_port = 587
-        sender_email = "kurukuruom@gmail.com"  # Your Gmail address
-        sender_password = "ller cmgm eznk scxq"   # TODO: REPLACE with Gmail App Password (16-char)
+        sender_email = os.getenv("GMAIL_EMAIL", "kurukuruom@gmail.com")
+        sender_password = os.getenv("GMAIL_APP_PASSWORD", "your-app-password")
         
-        # IMPORTANT: Use App Password, not regular password
-        # 1. Enable 2FA on Gmail
-        # 2. Go to: https://myaccount.google.com/apppasswords  
-        # 3. Generate App Password for "Mail"
-        # 4. Use the 16-character App Password here
+        # Check if environment variables are set
+        if sender_email == "kurukuruom@gmail.com" or sender_password == "your-app-password":
+            print("⚠️  EMAIL NOT CONFIGURED: Set environment variables")
+            print("   GMAIL_EMAIL=your-email@gmail.com")
+            print("   GMAIL_APP_PASSWORD=your-16-char-app-password")
+            print("📧 For Gmail: Enable 2FA and generate an App Password")
+            return False
         
         # Create message
         message = MIMEMultipart()
