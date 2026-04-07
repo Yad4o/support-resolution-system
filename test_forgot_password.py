@@ -88,7 +88,7 @@ def test_forgot_password_flow():
             json={
                 "email": TEST_EMAIL,
                 "otp": otp,
-                "new_password": TEST_PASSWORD
+                "new_password": "SecurePassword2026!"  # Production-ready password
             }
         )
         
