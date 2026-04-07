@@ -1,13 +1,20 @@
 """
-app/services/response_generator.py
+ =============================================================================
+ SRS (Support Request System) - Response Generation Service
+ =============================================================================
 
 Purpose:
 --------
-Generates human-readable responses for customer support tickets.
+Generates human-readable responses for customer support tickets with a robust
+fallback chain ensuring system reliability.
 
-Owner:
-------
-Om (Backend / Response Generation)
+Features:
+--------
+- Multi-tier response generation (Similarity -> OpenAI -> Template -> Fallback)
+- Sub-intent aware response selection
+- PII sanitization for similar solutions
+- Comprehensive error handling and logging
+- Template-based responses with keyword matching
 
 Responsibilities:
 -----------------
@@ -15,17 +22,29 @@ Responsibilities:
 - Handle similarity-based responses with quality scoring
 - Integrate OpenAI API with proper fallback chain
 - Ensure system never fails due to AI unavailability
+- Sanitize customer data from reused solutions
+
+Owner:
+------
+Backend Team
 
 DO NOT:
 -------
 - Make decisions about ticket resolution
 - Update database directly
 - Access external APIs directly (except OpenAI)
+- Break the fallback chain logic
 """
 
-from typing import Optional, Tuple
+import logging
 import re
+from typing import Optional, Tuple, Dict, List
+
 from app.core.config import settings
+from app.utils.service_helpers import MetricsHelper, ValidationHelper
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 # Attempt global import for OpenAI (Issue #12)
 try:
