@@ -30,6 +30,7 @@ References:
 """
 
 import logging
+import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -486,7 +487,7 @@ def _verify_user_otp(db: Session, email: str, otp: str) -> User:
         )
     
     # Verify OTP
-    if user.reset_otp != otp:
+    if not secrets.compare_digest(str(user.reset_otp), str(otp)):
         # Increment attempts
         user.reset_otp_attempts += 1
         db.commit()

@@ -42,7 +42,7 @@ router = APIRouter(
 )
 
 
-def _create_feedback(db: Session, ticket_id: int, rating: int, resolved: bool) -> Feedback:
+def create_feedback_record(db: Session, ticket_id: int, rating: int, resolved: bool) -> Feedback:
     """Helper method to encapsulate shared feedback creation logic."""
     # Validate that ticket exists
     ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
@@ -115,7 +115,7 @@ def create_feedback(
         HTTPException: If ticket not found or database operation fails
     """
     try:
-        feedback = _create_feedback(
+        feedback = create_feedback_record(
             db=db,
             ticket_id=feedback_data.ticket_id,
             rating=feedback_data.rating,
@@ -128,7 +128,10 @@ def create_feedback(
         raise
     except IntegrityError as e:
         db.rollback()
+        # This IntegrityError handler is effectively a defensive backup for a concurrent-insert race 
+        # condition because create_feedback_record already pre-checks for existing feedback
         if "UNIQUE constraint failed" in str(e) or "duplicate key" in str(e).lower():
+            logger.exception(f"Concurrent insert race detected: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Feedback already exists for ticket {feedback_data.ticket_id}"

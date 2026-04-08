@@ -38,7 +38,7 @@ from app.schemas.feedback import FeedbackCreate, FeedbackResponse, FeedbackCreat
 from app.models.ticket import Ticket
 from app.models.user import User
 from app.models.feedback import Feedback
-from app.api.feedback import _create_feedback
+from app.api.feedback import create_feedback_record
 from app.services.classifier import classify_intent
 from app.services.response_generator import generate_response
 from app.services.decision_engine import decide_resolution
@@ -586,7 +586,7 @@ def create_ticket_feedback(
         HTTPException: If ticket not found, not resolved, or feedback already exists
     """
     try:
-        feedback = _create_feedback(
+        feedback = create_feedback_record(
             db=db,
             ticket_id=ticket_id,
             rating=feedback_data.rating,

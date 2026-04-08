@@ -174,13 +174,14 @@ class BaseTestClass:
         assert "created_at" in data
     
     @staticmethod
-    def assert_error_response(response, expected_status: int, expected_message: str = None):
+    def assert_error_response(response, expected_status: int, expected_message: Optional[str] = None):
         """Assert error response structure."""
         assert response.status_code == expected_status
         if expected_message:
             data = response.json()
             if "error" in data:
-                actual_msg = data["error"].get("message", "")
+                error_val = data.get("error")
+                actual_msg = error_val.get("message", "") if isinstance(error_val, dict) else str(error_val)
             else:
                 actual_msg = data.get("detail", "")
                 if isinstance(actual_msg, list):

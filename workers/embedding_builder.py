@@ -40,10 +40,7 @@ Usage:
 import argparse
 import json
 import logging
-import math
-import re
 import sys
-from collections import Counter
 from pathlib import Path
 from typing import Dict, List
 

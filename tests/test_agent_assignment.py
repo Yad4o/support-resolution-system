@@ -13,8 +13,8 @@ with SQLite default journal mode.
 
 Error shape
 -----------
-FastAPI returns HTTP errors as {"detail": "..."}, not {"error": {"message": "..."}}.
-All assertions match against response.json()["detail"].
+API errors are returned with the shape {"error": {"message": "..."}}.
+All assertions match against response.json()["error"]["message"].
 """
 import pytest
 from fastapi.testclient import TestClient

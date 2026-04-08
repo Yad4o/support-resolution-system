@@ -1,7 +1,5 @@
 import json
 import math
-import re
-from collections import Counter
 from typing import Dict, List, Optional
 from app.utils.text_processing import tokenize, compute_idf, tf_idf_vector
 from app.core.config import settings
@@ -161,7 +159,7 @@ def find_similar_ticket(new_message: str, resolved_tickets: List[Dict], similari
         return None
 
     # Precompute IDF scores once for efficiency
-    idf_scores = compute_idf([new_message] + ticket_messages)
+    idf_scores = compute_idf([new_message, *ticket_messages])
 
     # Calculate TF-IDF for new message
     new_tfidf = tf_idf_vector(new_message, idf_scores)
