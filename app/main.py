@@ -94,7 +94,7 @@ def create_app() -> FastAPI:
     # Production configuration for Vercel frontend
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
+        allow_origins=settings.CORS_ORIGINS if settings.CORS_ORIGINS else [
             "https://srs-frontend-rho.vercel.app",
             "http://localhost:3000",  # Local development
             "http://localhost:5173",  # Vite dev server

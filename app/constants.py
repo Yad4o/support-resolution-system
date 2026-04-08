@@ -37,8 +37,7 @@ class UserRole(str, Enum):
 DEFAULT_PAGE_SIZE = 50
 MAX_PAGE_SIZE = 100
 
-# Rate limiting
-RATE_LIMIT_PER_MINUTE = 60
+
 
 # Similarity thresholds
 DEFAULT_SIMILARITY_THRESHOLD = 0.8
@@ -125,32 +124,7 @@ VALIDATION_PATTERNS = {
     "ticket_id": r'^\d+$',
 }
 
-# Database settings
-DATABASE_POOL_SIZE = 10
-DATABASE_MAX_OVERFLOW = 20
 
-# Logging levels
-LOG_LEVELS = {
-    "DEBUG": 10,
-    "INFO": 20,
-    "WARNING": 30,
-    "ERROR": 40,
-    "CRITICAL": 50,
-}
-
-# API response codes
-API_CODES = {
-    "SUCCESS": 200,
-    "CREATED": 201,
-    "BAD_REQUEST": 400,
-    "UNAUTHORIZED": 401,
-    "FORBIDDEN": 403,
-    "NOT_FOUND": 404,
-    "CONFLICT": 409,
-    "UNPROCESSABLE_ENTITY": 422,
-    "RATE_LIMITED": 429,
-    "INTERNAL_ERROR": 500,
-}
 
 # Feature flags
 FEATURE_FLAGS = {
@@ -181,13 +155,13 @@ __all__ = [
     "UserRole", 
     "DEFAULT_PAGE_SIZE",
     "MAX_PAGE_SIZE",
-    "RATE_LIMIT_PER_MINUTE",
+
     "DEFAULT_SIMILARITY_THRESHOLD",
     "ERROR_MESSAGES",
     "SUCCESS_MESSAGES",
     "ResponseTemplates",
     "DEFAULT_CONFIG",
     "VALIDATION_PATTERNS",
-    "API_CODES",
+
     "FEATURE_FLAGS",
 ]

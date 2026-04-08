@@ -26,7 +26,7 @@ DO NOT:
 
 import logging
 import os
-import random
+import secrets
 import string
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -45,7 +45,7 @@ def generate_otp() -> str:
     Returns:
         6-digit numeric OTP string
     """
-    return ''.join(random.choices(string.digits, k=6))
+    return ''.join(secrets.choice(string.digits) for _ in range(6))
 
 
 def send_otp_email(email: str, otp: str) -> bool:
