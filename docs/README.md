@@ -33,6 +33,26 @@
 |-----------|-------------|-----------|
 | [FRONTEND_ROLE_GUIDE.md](./FRONTEND_ROLE_GUIDE.md) | Role selection implementation | Frontend Devs |
 
+### 🚀 Deployment
+| Document | Description | Audience |
+|-----------|-------------|-----------|
+| [deployment/DEPLOYMENT.md](./deployment/DEPLOYMENT.md) | Deployment overview | DevOps |
+| [deployment/DEPLOYMENT_GUIDE.md](./deployment/DEPLOYMENT_GUIDE.md) | Detailed deployment guide | DevOps |
+| [deployment/VERCEL_RENDER_SETUP.md](./deployment/VERCEL_RENDER_SETUP.md) | Vercel/Render setup | DevOps |
+| [deployment/DATABASE_DEMO.md](./deployment/DATABASE_DEMO.md) | Database setup | DevOps |
+
+### 🧪 Testing
+| Document | Description | Audience |
+|-----------|-------------|-----------|
+| [testing/TESTING_DOCUMENTATION.md](./testing/TESTING_DOCUMENTATION.md) | Testing overview | Developers |
+| [testing/TEST_IMPLEMENTATION_SUMMARY.md](./testing/TEST_IMPLEMENTATION_SUMMARY.md) | Test implementation | Developers |
+| [testing/TEST_FIXES_SUMMARY.md](./testing/TEST_FIXES_SUMMARY.md) | Test fixes | Developers |
+
+### 📚 User Guides
+| Document | Description | Audience |
+|-----------|-------------|-----------|
+| [guides/FORGOT_PASSWORD_README.md](./guides/FORGOT_PASSWORD_README.md) | Password reset help | Users |
+
 ---
 
 ## 🎯 How to Use This Documentation
