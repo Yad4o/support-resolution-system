@@ -297,7 +297,7 @@ def list_tickets(
             query = query.filter(Ticket.status == ticket_status)
         
         # Apply user filter for non-admin/agent users
-        if user_id and user_role not in ["admin", "agent"]:
+        if user_id and user_role not in [UserRole.ADMIN.value, UserRole.AGENT.value]:
             query = query.filter(Ticket.user_id == user_id)
         
         # Get total before pagination
