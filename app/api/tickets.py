@@ -38,7 +38,7 @@ from app.schemas.feedback import FeedbackCreate, FeedbackResponse, FeedbackCreat
 from app.models.ticket import Ticket
 from app.models.user import User
 from app.models.feedback import Feedback
-from app.api.feedback import create_feedback_record
+from app.services.feedback_service import create_feedback_record
 from app.services.classifier import classify_intent
 from app.services.response_generator import generate_response
 from app.services.decision_engine import decide_resolution
