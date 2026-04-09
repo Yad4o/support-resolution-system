@@ -2,21 +2,14 @@
 app/models/user.py
 
 Purpose:
---------
 Defines the User database model.
 
-Owner:
-------
-Om (Backend / Data Modeling)
-
 Responsibilities:
------------------
 - Represent application users in the database
 - Store authentication-related fields
 - Support role-based access control
 
 DO NOT:
--------
 - Hash passwords here
 - Implement authentication logic
 - Write database queries here
@@ -125,3 +118,4 @@ class User(Base):
         nullable=False,
         doc="Timestamp when the record was last updated",
     )
+

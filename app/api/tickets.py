@@ -2,21 +2,14 @@
 app/api/tickets.py
 
 Purpose:
---------
 Defines API endpoints for managing support tickets.
 
-Owner:
-------
-Om (Backend / Core API)
-
 Responsibilities:
------------------
 - Create support tickets
 - Retrieve ticket information
 - Trigger automated ticket resolution workflow
 
 DO NOT:
--------
 - Implement AI classification here
 - Implement resolution decision logic here
 - Access external APIs directly here
@@ -27,6 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import update
 from sqlalchemy.orm import Session
+from typing import Annotated
 import logging
 
 from app.schemas.ticket import (
@@ -69,8 +63,8 @@ oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=
 def create_ticket(
     request: Request,
     ticket_data: TicketCreate,
-    db: Session = Depends(get_db),
-    token: str | None = Depends(oauth2_scheme_optional),
+    db: Annotated[Session, Depends(get_db)],
+    token: Annotated[str | None, Depends(oauth2_scheme_optional)] = Depends(oauth2_scheme_optional),
 ) -> TicketResponse:
     """
     Create a new support ticket with AI automation.
@@ -104,7 +98,7 @@ def create_ticket(
         # Step 1: Create ticket with initial status
         ticket = Ticket(
             message=ticket_data.message,
-            status="open",
+            status=TicketStatus.OPEN.value,
             user_id=user_id
         )
         
@@ -124,7 +118,7 @@ def create_ticket(
             # Rollback any partial AI processing, then escalate
             db.rollback()
             
-            ticket.status = "escalated"
+            ticket.status = TicketStatus.ESCALATED.value
             ticket.intent = None
             ticket.confidence = None
             ticket.sub_intent = None 
@@ -151,13 +145,13 @@ def create_ticket(
 def list_tickets(
     ticket_status: str | None = Query(
         None,
-        description="Filter tickets by status (open, auto_resolved, escalated, closed)",
+        description=f"Filter tickets by status ({TicketStatus.OPEN.value}, {TicketStatus.AUTO_RESOLVED.value}, {TicketStatus.ESCALATED.value}, {TicketStatus.CLOSED.value})",
         alias="status"
     ),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db),
-    token: str | None = Depends(oauth2_scheme_optional),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
+    token: Annotated[str | None, Depends(oauth2_scheme_optional)] = Depends(oauth2_scheme_optional),
 ) -> TicketList:
     """
     List all tickets with optional status filtering.
@@ -232,7 +226,7 @@ def tickets_health():
 @router.get("/{ticket_id}", response_model=TicketResponse)
 def get_ticket(
     ticket_id: int,
-    db: Session = Depends(get_db),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
 ) -> TicketResponse:
     """
     Retrieve a single ticket by ID.
@@ -273,8 +267,8 @@ def get_ticket(
 @router.post("/{ticket_id}/assign", response_model=TicketResponse)
 def assign_ticket(
     ticket_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_agent_or_admin)
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
+    current_user: Annotated[User, Depends(require_agent_or_admin)] = Depends(require_agent_or_admin)
 ) -> TicketResponse:
     """
     Assign an escalated ticket to the current agent/admin.
@@ -301,7 +295,7 @@ def assign_ticket(
             .where(
                 Ticket.id == ticket_id,
                 Ticket.assigned_agent_id.is_(None),
-                Ticket.status == "escalated",
+                Ticket.status == TicketStatus.ESCALATED.value,
             )
             .values(assigned_agent_id=current_user.id)
         )
@@ -322,7 +316,7 @@ def assign_ticket(
             # the first succeeded (rowcount=1, now committed by peer), the second
             # lands here (rowcount=0) and finds the ticket already theirs.
             # Return 200 idempotently — nothing to commit.
-            if ticket.assigned_agent_id == current_user.id and ticket.status == "escalated":
+            if ticket.assigned_agent_id == current_user.id and ticket.status == TicketStatus.ESCALATED.value:
                 logger.info(f"Ticket {ticket_id} already assigned to user {current_user.id} (self-race)")
                 return TicketResponse.model_validate(ticket)
 
@@ -331,7 +325,7 @@ def assign_ticket(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=f"Ticket already assigned to agent {ticket.assigned_agent_id}",
                 )
-            if ticket.status != "escalated":
+            if ticket.status != TicketStatus.ESCALATED.value:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=f"Ticket status changed to '{ticket.status}', cannot assign",
@@ -368,8 +362,8 @@ def assign_ticket(
 @router.post("/{ticket_id}/close", response_model=TicketResponse)
 def close_ticket(
     ticket_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_agent_or_admin)
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
+    current_user: Annotated[User, Depends(require_agent_or_admin)] = Depends(require_agent_or_admin)
 ) -> TicketResponse:
     """
     Close an escalated or auto_resolved ticket.
@@ -398,9 +392,9 @@ def close_ticket(
             update(Ticket)
             .where(
                 Ticket.id == ticket_id,
-                Ticket.status.in_(["escalated", "auto_resolved"]),
+                Ticket.status.in_([TicketStatus.ESCALATED.value, TicketStatus.AUTO_RESOLVED.value]),
             )
-            .values(status="closed")
+            .values(status=TicketStatus.CLOSED.value)
         )
 
         if result.rowcount == 0:
@@ -452,7 +446,7 @@ def close_ticket(
 def create_ticket_feedback(
     ticket_id: int,
     feedback_data: FeedbackCreateNested,
-    db: Session = Depends(get_db),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
 ) -> FeedbackResponse:
     """
     Create feedback for a resolved ticket.
@@ -491,6 +485,7 @@ def create_ticket_feedback(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error occurred while creating feedback"
         ) from e
+
 
 
 

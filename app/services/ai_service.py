@@ -2,22 +2,15 @@
 app/services/ai_service.py
 
 Purpose:
---------
 Example AI service implementation with fallback handling.
 
-Owner:
-------
-Backend Team
-
 Responsibilities:
------------------
 - Demonstrate AI service failure handling
 - Implement fallback responses for AI failures
 - Show proper error logging without exposing details
 - Return 200 with fallback when AI services fail
 
 DO NOT:
--------
 - Expose AI service internal errors to clients
 - Return 500 errors for AI service failures
 - Skip logging AI service failures
@@ -244,4 +237,5 @@ class SentimentAnalysisService(BaseAIService):
             ai_function=ai_analyze,
             text=text
         )
+
 

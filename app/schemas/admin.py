@@ -2,15 +2,9 @@
 app/schemas/admin.py
 
 Purpose:
---------
 Pydantic response models for admin-level API endpoints.
 
-Owner:
-------
-Om (Backend / API Contracts)
-
 Responsibilities:
------------------
 - Validate and document the shape of admin metrics responses
 - Validate and document the shape of admin ticket list responses
 """
@@ -88,3 +82,4 @@ class AdminTicketListResponse(BaseModel):
     tickets: list[AdminTicketItem]
     pagination: PaginationMeta
     filters: FiltersMeta
+

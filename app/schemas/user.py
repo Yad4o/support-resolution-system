@@ -2,21 +2,14 @@
 app/schemas/user.py
 
 Purpose:
---------
 Defines Pydantic schemas for User-related API requests and responses.
 
-Owner:
-------
-Om (Backend / API Contracts)
-
 Responsibilities:
------------------
 - Validate incoming user data (login, registration)
 - Shape API responses (never expose hashed_password)
 - Define the Token response schema for JWT auth
 
 DO NOT:
--------
 - Access database here
 - Hash passwords here
 - Implement authentication logic here
@@ -67,11 +60,9 @@ class UserLogin(BaseModel):
     Schema used for user login.
 
     Used in:
-    --------
     POST /auth/login
 
     Fields:
-    -------
     - email: User email address (validated as EmailStr)
     - password: Plain-text password (never stored — passed to verify_password)
     """
@@ -85,11 +76,9 @@ class UserCreate(BaseModel):
     Schema used when registering a new user.
 
     Used in:
-    --------
     POST /auth/register
 
     Fields:
-    -------
     - email: User email (validated as EmailStr)
     - password: Plain-text password (will be hashed by auth API before storage)
     - role: User role (optional, defaults to "user")
@@ -121,11 +110,9 @@ class ForgotPasswordRequest(BaseModel):
     Schema for forgot password request.
 
     Used in:
-    --------
     POST /auth/forgot-password
 
     Fields:
-    -------
     - email: User email address to send OTP to
     """
 
@@ -137,11 +124,9 @@ class VerifyOTPRequest(BaseModel):
     Schema for OTP verification request.
 
     Used in:
-    --------
     POST /auth/verify-otp
 
     Fields:
-    -------
     - email: User email address
     - otp: 6-digit OTP code
     """
@@ -160,11 +145,9 @@ class ResetPasswordRequest(BaseModel):
     Schema for password reset request.
 
     Used in:
-    --------
     POST /auth/reset-password
 
     Fields:
-    -------
     - email: User email address
     - otp: 6-digit OTP code
     - new_password: New password to set
@@ -195,12 +178,10 @@ class UserResponse(BaseModel):
     Schema returned when user information is sent to clients.
 
     IMPORTANT:
-    ----------
     Never include sensitive fields such as:
     - hashed_password
 
     Used in:
-    --------
     POST /auth/register (response)
     GET  /users/me (future)
     """
@@ -220,11 +201,9 @@ class Token(BaseModel):
     in the Authorization header as ``Bearer <token>`` for protected routes.
 
     Used in:
-    --------
     POST /auth/login (response)
 
     Fields:
-    -------
     - access_token: The signed JWT string
     - token_type:   Always "bearer" (OAuth 2.0 convention)
 
@@ -240,11 +219,9 @@ class ForgotPasswordResponse(BaseModel):
     Schema for forgot password response.
 
     Used in:
-    --------
     POST /auth/forgot-password (response)
 
     Fields:
-    -------
     - message: Success message indicating OTP was sent
     - otp_expires_in: Number of minutes until OTP expires
     """
@@ -258,11 +235,9 @@ class VerifyOTPResponse(BaseModel):
     Schema for OTP verification response.
 
     Used in:
-    --------
     POST /auth/verify-otp (response)
 
     Fields:
-    -------
     - message: Success message indicating OTP is valid
     - is_valid: Boolean indicating if OTP is valid
     """
@@ -276,12 +251,11 @@ class ResetPasswordResponse(BaseModel):
     Schema for password reset response.
 
     Used in:
-    --------
     POST /auth/reset-password (response)
 
     Fields:
-    -------
     - message: Success message indicating password was reset
     """
 
     message: str
+

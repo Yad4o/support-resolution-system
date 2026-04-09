@@ -2,28 +2,20 @@
 app/api/auth.py
 
 Purpose:
---------
 Authentication API endpoints for user login and registration.
 
-Owner:
-------
-Om (Backend / API Development)
-
 Responsibilities:
------------------
 - Handle user login with email and password
 - Generate JWT access tokens for authenticated users
 - Optional: Handle user registration with password hashing
 - Return appropriate HTTP status codes and error messages
 
 DO NOT:
--------
 - Store passwords in plain text
 - Implement business logic beyond authentication
 - Access database without proper error handling
 
 References:
------------
 - Technical Spec § 10.1 (Authentication)
 - Task 2.1 (Security Utilities)
 - Task 2.2 (User Schemas)
@@ -40,7 +32,20 @@ from datetime import timedelta
 from typing import Annotated
 from jose import JWTError
 
-from app.constants import UserRole
+from app.constants import (
+    UserRole,
+    AUTH_SERVICE_UNAVAILABLE,
+    INCORRECT_CREDENTIALS,
+    EMAIL_ALREADY_REGISTERED,
+    EMAIL_PASSWORD_REQUIRED,
+    INVALID_DEFAULT_ROLE,
+    COULD_NOT_VALIDATE_CREDENTIALS,
+    EMAIL_NOT_FOUND,
+    INVALID_OTP,
+    OTP_EXPIRED,
+    MAX_OTP_ATTEMPTS,
+    EMAIL_SEND_FAILED
+)
 
 from app.core.security import verify_password, create_access_token, hash_password, decode_token, check_password_truncation
 from app.core.config import settings, ALLOWED_ROLES
@@ -61,19 +66,6 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 # Configure logger
 logger = logging.getLogger(__name__)
-
-# Error message constants for better maintainability
-AUTH_SERVICE_UNAVAILABLE = "Authentication service temporarily unavailable"
-INCORRECT_CREDENTIALS = "Incorrect email or password"
-EMAIL_ALREADY_REGISTERED = "Email already registered"
-EMAIL_PASSWORD_REQUIRED = "Email and password are required"
-INVALID_DEFAULT_ROLE = "Invalid default role configuration"
-COULD_NOT_VALIDATE_CREDENTIALS = "Could not validate credentials"
-EMAIL_NOT_FOUND = "Email address not found"
-INVALID_OTP = "Invalid or expired OTP"
-OTP_EXPIRED = "OTP has expired"
-MAX_OTP_ATTEMPTS = "Maximum OTP attempts exceeded. Please request a new OTP"
-EMAIL_SEND_FAILED = "Failed to send OTP email. Please try again"
 
 
 def normalize_email(email: str) -> str:
@@ -606,3 +598,4 @@ def reset_password(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=AUTH_SERVICE_UNAVAILABLE
         )
+

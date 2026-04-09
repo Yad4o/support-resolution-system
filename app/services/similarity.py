@@ -2,16 +2,11 @@
 app/services/similarity.py  [DEPRECATED]
 
 Deprecated:
------------
 This module is a Phase 3 spec alias. Import directly from the canonical module instead:
 
     from app.services.similarity_search import find_similar_ticket
 
 This file will be removed in a future release.
-
-Owner:
-------
-Prajwal (AI / NLP / Similarity Search)
 """
 
 import warnings
@@ -27,3 +22,4 @@ warnings.warn(
 from app.services.similarity_search import find_similar_ticket  # noqa: E402, F401
 
 __all__ = ["find_similar_ticket"]
+

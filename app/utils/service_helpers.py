@@ -2,15 +2,10 @@
 app/utils/service_helpers.py
 
 Purpose:
---------
 Common utility functions for service layer operations.
-
-Owner:
-------
 Service Utilities
 
 Responsibilities:
------------------
 - Common database operations
 - Error handling helpers
 - Validation utilities
@@ -213,7 +208,19 @@ class MetricsHelper:
             logger.info(f"Additional metrics: {kwargs}")
 
 
+def compute_quality_score(rating: int, resolved: bool) -> float:
+    """
+    Compute a normalized quality score (0.0-1.0).
+    
+    Formula: base_score (rating/5) + resolution_boost (+0.1 if resolved, -0.1 if not)
+    """
+    base_score = rating / 5.0
+    resolution_boost = 0.1 if resolved else -0.1
+    return max(0.0, min(1.0, base_score + resolution_boost))
+
+
 # Convenience imports for backward compatibility
 safe_commit = DatabaseOps.safe_commit
 create_with_rollback = DatabaseOps.create_with_rollback
 get_or_none = DatabaseOps.get_or_none
+

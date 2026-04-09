@@ -2,21 +2,15 @@
 app/services/ticket_service.py
 
 Purpose:
---------
 Business logic for ticket processing and automation pipeline.
-
-Owner:
-------
 Backend / Service Layer
 
 Responsibilities:
------------------
 - Run AI automation pipeline for ticket classification and resolution
 - Extract user identity from optional JWT tokens
 - Coordinate classifier, similarity search, decision engine, and response generator
 
 DO NOT:
--------
 - Handle HTTP request/response here
 - Access FastAPI Request/Response objects directly
 """
@@ -183,3 +177,4 @@ def run_ticket_automation(ticket: Ticket, db: Session) -> Ticket:
     db.commit()
     db.refresh(ticket)
     return ticket
+

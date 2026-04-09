@@ -2,7 +2,6 @@
 app/services/decision.py  [DEPRECATED]
 
 Deprecated:
------------
 This module is a Phase 3 spec alias. Import directly from the canonical module instead:
 
     from app.services.decision_engine import decide_resolution, get_confidence_threshold, set_confidence_threshold
@@ -23,3 +22,4 @@ warnings.warn(
 from app.services.decision_engine import decide_resolution, get_confidence_threshold, set_confidence_threshold  # noqa: E402, F401
 
 __all__ = ["decide_resolution", "get_confidence_threshold", "set_confidence_threshold"]
+

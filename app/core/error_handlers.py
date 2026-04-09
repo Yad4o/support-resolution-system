@@ -2,22 +2,15 @@
 app/core/error_handlers.py
 
 Purpose:
---------
 Implement FastAPI exception handlers for consistent error responses.
 
-Owner:
-------
-Backend Team
-
 Responsibilities:
------------------
 - Register FastAPI exception handlers
 - Log errors server-side without exposing details
 - Return appropriate HTTP status codes
 - Handle AI/service failures with fallback responses
 
 DO NOT:
--------
 - Expose stack traces to clients
 - Include sensitive internal information
 - Return raw exception messages to clients
@@ -291,3 +284,4 @@ def handle_ai_service_failure(
             "message": "AI service temporarily unavailable, using fallback response"
         }
     }
+

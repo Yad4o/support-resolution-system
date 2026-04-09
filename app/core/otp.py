@@ -2,22 +2,15 @@
 app/core/otp.py
 
 Purpose:
---------
 OTP generation and email sending utilities for password reset.
 
-Owner:
-------
-Om (Backend / Security)
-
 Responsibilities:
------------------
 - Generate secure 6-digit OTPs
 - Send OTP emails using Resend API
 - Validate OTP format and expiration
 - Handle OTP-related security measures
 
 DO NOT:
--------
 - Store OTPs in plain text for extended periods
 - Send sensitive information via email
 - Allow unlimited OTP attempts
@@ -128,3 +121,4 @@ def log_otp_for_dev(email: str, otp: str) -> None:
         otp: Generated OTP
     """
     logger.debug("DEV LOG — OTP for %s: %s (expires in 10 minutes)", email, otp)
+
