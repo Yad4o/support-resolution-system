@@ -48,7 +48,7 @@ class _RedisClientManager:
             )
             return self._client
         except Exception as e:
-            ErrorHelper.log_and_raise(e, "Failed to create Redis client")
+            ErrorHelper.log_only(e, "Failed to create Redis client")
             # Do not cache the failure — allow retry on next call
             return None
 
