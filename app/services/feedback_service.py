@@ -4,6 +4,9 @@ from fastapi import HTTPException, status
 
 from app.models.feedback import Feedback
 from app.models.ticket import Ticket
+from app.constants import TicketStatus
+
+from app.utils.service_helpers import compute_quality_score
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +21,7 @@ def create_feedback_record(db: Session, ticket_id: int, rating: int, resolved: b
         )
     
     # Check if ticket is in resolved state
-    if ticket.status not in ["auto_resolved", "closed"]:
+    if ticket.status not in [TicketStatus.AUTO_RESOLVED.value, TicketStatus.CLOSED.value]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Ticket {ticket_id} is not resolved (current status: {ticket.status})"
@@ -43,9 +46,7 @@ def create_feedback_record(db: Session, ticket_id: int, rating: int, resolved: b
     db.add(feedback)
     
     # Compute quality score for the ticket
-    base_score = rating / 5.0
-    resolution_boost = 0.1 if resolved else -0.1
-    ticket.quality_score = max(0.0, min(1.0, base_score + resolution_boost))
+    ticket.quality_score = compute_quality_score(rating, resolved)
     
     # Commit both operations together
     db.commit()
@@ -53,3 +54,4 @@ def create_feedback_record(db: Session, ticket_id: int, rating: int, resolved: b
     
     logger.info(f"Feedback created for ticket {ticket_id}: rating={rating}, resolved={resolved}")
     return feedback
+

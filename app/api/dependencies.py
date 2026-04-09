@@ -2,16 +2,11 @@
 app/api/dependencies.py
 
 Purpose:
---------
 Shared FastAPI dependency functions for RBAC (role-based access control).
 
 Keeping role-enforcement logic here — separate from app/api/auth.py — prevents
 circular imports and ensures auth.py remains responsible only for token
 issuance/validation, not downstream permission checks.
-
-Owner:
-------
-Om (Backend / Core API)
 """
 
 from fastapi import Depends, HTTPException, status
@@ -42,3 +37,4 @@ def require_agent_or_admin(
             detail="Access denied. Agent or admin role required.",
         )
     return current_user
+

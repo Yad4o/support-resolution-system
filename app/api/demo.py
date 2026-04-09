@@ -199,3 +199,4 @@ def get_demo_summary(include_rows: bool = False, db: Session = Depends(get_db)):
     except SQLAlchemyError:
         logger.exception("Database operation failed")
         raise HTTPException(status_code=500, detail="Database error")
+

@@ -91,3 +91,4 @@ def set_confidence_threshold(threshold: float) -> None:
 
     # Update the settings object (test/dev only)
     settings.CONFIDENCE_THRESHOLD_AUTO_RESOLVE = threshold
+

@@ -2,21 +2,14 @@
 app/models/ticket.py
 
 Purpose:
---------
 Defines the Ticket database model.
 
-Owner:
-------
-Om (Backend / Data Modeling)
-
 Responsibilities:
------------------
 - Represent customer support tickets
 - Store AI classification results
 - Track ticket lifecycle status
 
 DO NOT:
--------
 - Perform AI classification here
 - Implement resolution logic here
 - Write database queries here
@@ -147,3 +140,4 @@ class Ticket(Base):
 
     user = relationship("User", foreign_keys=[user_id])
     assigned_agent = relationship("User", foreign_keys=[assigned_agent_id])
+

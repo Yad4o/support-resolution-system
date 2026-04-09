@@ -2,28 +2,20 @@
 app/core/security.py
 
 Purpose:
---------
 Security utilities for the application.
 Provides password hashing/verification and JWT token creation/decoding.
 
-Owner:
-------
-Om (Backend / System)
-
 Responsibilities:
------------------
 - Hash and verify passwords using bcrypt via passlib
 - Create and decode JWT access tokens using python-jose
 - Read security configuration from settings
 
 DO NOT:
--------
 - Store state here
 - Access database directly
 - Implement auth business logic (that belongs in app/api/auth.py)
 
 References:
------------
 - Technical Spec § 10.1 (Authentication)
 - Technical Spec § 10.2 (Password Handling)
 """
@@ -217,3 +209,4 @@ def decode_token(token: str) -> dict:
     except (JWTError, ValueError, UnicodeDecodeError) as e:
         # Re-raise JWT errors to ensure proper handling upstream
         raise JWTError(f"Invalid token: {str(e)}") from e
+

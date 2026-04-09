@@ -2,21 +2,14 @@
 app/schemas/ticket.py
 
 Purpose:
---------
 Defines Pydantic schemas for Ticket-related API requests and responses.
 
-Owner:
-------
-Om (Backend / API Contracts)
-
 Responsibilities:
------------------
 - Validate ticket creation input
 - Shape ticket-related API responses
 - Expose ticket lifecycle safely to clients
 
 DO NOT:
--------
 - Access database here
 - Implement AI classification here
 - Change ticket status here
@@ -32,11 +25,9 @@ class TicketCreate(BaseModel):
     Schema used when a user creates a new support ticket.
 
     Used in:
-    --------
     POST /tickets
 
     Fields:
-    -------
     - message: Raw customer message describing the issue
     """
 
@@ -52,7 +43,6 @@ class TicketResolveRequest(BaseModel):
     Schema used to trigger ticket resolution.
 
     Used in:
-    --------
     POST /tickets/{ticket_id}/resolve
 
     Currently empty, but exists for future extensibility.
@@ -68,7 +58,6 @@ class TicketResponse(BaseModel):
     Schema returned when fetching or resolving a ticket.
 
     Used in:
-    --------
     GET /tickets/{id}
     POST /tickets/{id}/resolve
     """
@@ -97,13 +86,12 @@ class TicketList(BaseModel):
     Schema returned when fetching a list of tickets.
 
     Used in:
-    --------
     GET /tickets
 
     Fields:
-    -------
     - tickets: List of TicketResponse objects
     """
 
     tickets: list[TicketResponse]
     total: int = 0
+

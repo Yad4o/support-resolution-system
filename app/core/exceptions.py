@@ -2,21 +2,14 @@
 app/core/exceptions.py
 
 Purpose:
---------
 Define custom exception classes for consistent error handling across the API.
 
-Owner:
-------
-Backend Team
-
 Responsibilities:
------------------
 - Define application-specific exception types
 - Map error types to HTTP status codes
 - Provide consistent error structure for API responses
 
 DO NOT:
--------
 - Include sensitive internal information in error messages
 - Expose stack traces or implementation details
 - Use generic exceptions for business logic errors
@@ -188,3 +181,4 @@ def create_error_response(
         response["error"]["details"] = error.details
     
     return response
+

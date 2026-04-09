@@ -2,22 +2,15 @@
 app/api/feedback.py
 
 Purpose:
---------
 Defines API endpoints for collecting user feedback.
 
-Owner:
-------
-Om (Backend / API Layer)
-
 Responsibilities:
------------------
 - Accept feedback for resolved tickets
 - Store feedback in database
 - Retrieve feedback for tickets
 - Keep feedback collection simple and reliable
 
 DO NOT:
--------
 - Analyze feedback here
 - Modify AI logic here
 - Change ticket resolution status here
@@ -26,6 +19,7 @@ DO NOT:
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from typing import Annotated
 import logging
 
 from app.schemas.feedback import FeedbackCreate, FeedbackResponse
@@ -47,7 +41,7 @@ router = APIRouter(
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=FeedbackResponse)
 def create_feedback(
     feedback_data: FeedbackCreate,
-    db: Session = Depends(get_db),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
 ):
     """
     Create feedback for a resolved ticket.
@@ -109,7 +103,7 @@ def create_feedback(
 @router.get("/{ticket_id}", response_model=FeedbackResponse)
 def get_feedback_by_ticket_id(
     ticket_id: int,
-    db: Session = Depends(get_db),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
 ):
     """
     Retrieve feedback for a specific ticket by ticket ID.
@@ -150,7 +144,7 @@ def get_feedback_by_ticket_id(
 @router.get("/", response_model=FeedbackResponse)
 def get_feedback_by_query(
     ticket_id: int = Query(..., description="ID of the ticket to get feedback for"),
-    db: Session = Depends(get_db),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
 ):
     """
     Retrieve feedback for a ticket using query parameter.
@@ -169,3 +163,4 @@ def get_feedback_by_query(
     """
     # Delegate to the path-parameter endpoint to keep behavior and error handling consistent
     return get_feedback_by_ticket_id(ticket_id=ticket_id, db=db)
+

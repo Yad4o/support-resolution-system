@@ -2,22 +2,15 @@
 app/core/config.py
 
 Purpose:
---------
 Centralized configuration management for the application.
 All environment variables and settings are defined here.
 
-Owner:
-------
-Om (Backend / System)
-
 Responsibilities:
------------------
 - Load environment variables
 - Define application settings
 - Provide a cached settings object
 
 DO NOT:
--------
 - Write business logic here
 - Access database directly
 - Hardcode secrets
@@ -162,7 +155,6 @@ def get_settings() -> Settings:
     Returns a cached Settings instance.
 
     Why cache?
-    ----------
     - Avoid re-reading environment variables
     - Ensure consistent configuration across app
 
@@ -174,3 +166,4 @@ def get_settings() -> Settings:
 
 # Global settings instance used across the app
 settings = get_settings()
+

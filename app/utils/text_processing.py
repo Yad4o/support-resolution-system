@@ -66,3 +66,4 @@ def tf_idf_vector(text: str, idf: Dict[str, float]) -> Dict[str, float]:
     tf = Counter(tokens)
     total = len(tokens)
     return {word: (count / total) * idf.get(word, 1.0) for word, count in tf.items()}
+

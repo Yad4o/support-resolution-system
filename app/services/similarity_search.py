@@ -5,6 +5,7 @@ from app.utils.text_processing import tokenize, compute_idf, tf_idf_vector
 from app.core.config import settings
 from app.models.ticket import Ticket
 from app.utils.service_helpers import CacheHelper, ErrorHelper, MetricsHelper
+from app.constants import TicketStatus
 from sqlalchemy.orm import Session
 
 
@@ -121,7 +122,7 @@ def get_resolved_tickets(db: Session) -> list[Ticket]:
     return (
         db.query(Ticket)
         .filter(
-            Ticket.status == "auto_resolved",
+            Ticket.status == TicketStatus.AUTO_RESOLVED.value,
             Ticket.response.isnot(None),
         )
         .order_by(Ticket.created_at.desc())
@@ -243,3 +244,4 @@ def find_similar_ticket(new_message: str, resolved_tickets: list[dict], similari
         return raw_result
     
     return None
+
