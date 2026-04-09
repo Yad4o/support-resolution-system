@@ -20,29 +20,61 @@ class _SafeEncoder(json.JSONEncoder):
 # Alias used internally
 SafeEncoder = _SafeEncoder
 
-# Redis client singleton for lazy load
-_redis_client = None
+
+class _RedisClientManager:
+    """Lazy-initializing, encapsulated Redis client holder.
+
+    Avoids module-level mutable state and ``global`` statements.
+    Call :meth:`get` to retrieve (or create) the client.
+    Call :meth:`reset` to clear a failed connection so the next
+    call to :meth:`get` will attempt a fresh connection.
+    """
+
+    def __init__(self) -> None:
+        self._client = None
+
+    def get(self):
+        """Return a Redis client if REDIS_URL is configured, else None."""
+        if self._client is not None:
+            return self._client
+
+        if not settings.REDIS_URL:
+            return None
+
+        try:
+            import redis
+            self._client = redis.from_url(
+                settings.REDIS_URL, decode_responses=True, socket_timeout=1
+            )
+            return self._client
+        except Exception as e:
+            ErrorHelper.log_only(e, "Failed to create Redis client")
+            # Do not cache the failure — allow retry on next call
+            return None
+
+    def reset(self) -> None:
+        """Disconnect the connection pool and clear the cached client.
+
+        Calls ``close()`` on the synchronous client (which disconnects all
+        pooled sockets) before dropping the reference so file descriptors
+        are released promptly.  Any error from ``close()`` is suppressed —
+        the reference is always cleared via ``finally``.
+        """
+        if self._client is not None:
+            try:
+                self._client.close()
+            except Exception:
+                pass  # Already broken — nothing useful we can do
+            finally:
+                self._client = None
+
+
+_redis_manager = _RedisClientManager()
 
 
 def _get_cache_client():
     """Return a Redis client if REDIS_URL is configured, else None."""
-    global _redis_client
-    if _redis_client is not None:
-        return _redis_client
-
-    if not settings.REDIS_URL:
-        return None
-        
-    try:
-        import redis
-        _redis_client = redis.from_url(
-            settings.REDIS_URL, decode_responses=True, socket_timeout=1
-        )
-        return _redis_client
-    except Exception as e:
-        ErrorHelper.log_and_raise(e, "Failed to create Redis client")
-        _redis_client = None  # Don't cache the failure
-        return None
+    return _redis_manager.get()
 
 
 def _cache_key(message: str) -> str:
@@ -114,10 +146,9 @@ def find_similar_ticket(new_message: str, resolved_tickets: list[dict], similari
     Returns:
         Dict with {"matched_text": str, "similarity_score": float} or None if no match above threshold
     """
-    global _redis_client
     if not new_message or not isinstance(new_message, str):
         return None
-    
+
     if not resolved_tickets or not isinstance(resolved_tickets, list):
         return None
 
@@ -142,10 +173,10 @@ def find_similar_ticket(new_message: str, resolved_tickets: list[dict], similari
                 # Apply current threshold to cached raw result
                 if cached_data and cached_data.get("similarity_score", 0.0) >= similarity_threshold:
                     return cached_data
-                return None # Message is in cache but doesn't meet this threshold
+                return None  # Message is in cache but doesn't meet this threshold
         except Exception:
-            _redis_client = None
-            pass
+            _redis_manager.reset()
+            cache = None
 
     # Extract messages from resolved tickets
     ticket_messages = []
@@ -204,8 +235,8 @@ def find_similar_ticket(new_message: str, resolved_tickets: list[dict], similari
             # We always cache the best found match so future calls with lower thresholds can use it
             cache.setex(key, 300, json.dumps(raw_result, cls=SafeEncoder))
         except Exception:
-            _redis_client = None
-            pass
+            _redis_manager.reset()
+            cache = None
 
     # Check if raw result meets the requested threshold for THIS call
     if raw_result and raw_result["similarity_score"] >= similarity_threshold:

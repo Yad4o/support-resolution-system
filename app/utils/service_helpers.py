@@ -167,6 +167,11 @@ class ErrorHelper:
         """Log an error and raise it."""
         logger.exception(message)
         raise error
+
+    @staticmethod
+    def log_only(error: Exception, message: str = "An error occurred"):
+        """Log an error without raising it."""
+        logger.exception(message)
     
     @staticmethod
     def handle_database_error(error: Exception, operation: str) -> dict[str, Any]:
